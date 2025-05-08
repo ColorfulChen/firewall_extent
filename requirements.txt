@@ -1,0 +1,8 @@
+# azure-cognitiveservices-vision-computervision
+# pillow
+azure-ai-vision-imageanalysis
+alibabacloud_green20220302==2.20.0
+oss2
+Jinja2
+MarkupSafe
+accelerate
