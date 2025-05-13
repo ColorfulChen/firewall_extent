@@ -1,5 +1,23 @@
 # firewall_extent
 
+TODO：
+1. add support to google search video pages.(google_search_page_filter() function in tools/google.py) (priority)
+2. add image detection support to google_load.py(priority)
+3. 完整的谷歌过滤方案描述(priority)
+4. 关键词（正则）
+5. 改成flask api服务，提供json这边返回。
+6. 性能指标（？）
+
+六月中期，五月底之前需要
+
+7. 改成 C/C++ 函数的逻辑
+8. add support to to the other website:github*\wikipedia\huggingface\dockerhub\youtube\twitter\facebook\google search\google scholar\google patents (not urgent)
+9. replace the test_image with not safe for work content for labeling. (not urgent)
+10. change test script(test.py)'s algorithm to output the accuracy for the test function in labeling test image. (not urgent)
+11. add llm support to filter long text. (not urgent)
+12. add llm vision(claude) to filter nsfw picture. (not urgent)
+
+
 ## Project Overview
 
 This project contains scripts for filtering Google search results and for testing image classification.
@@ -84,10 +102,3 @@ The project relies on several Python libraries. Key dependencies likely include:
 
 Refer to `requirements.txt` in the root directory and potentially in `code_to_be_reviewd/google/` for a more complete list of dependencies.
 
-TODO：
-1. add support to google search video pages.(google_search_page_filter() function in tools/google.py) (priority)
-2. add support to to the other website:github\wikipedia\huggingface\dockerhub\youtube\twitter\facebook\google search\google scholar\google patents (not urgent)
-3. replace the test_image with not safe for work content for labeling. (not urgent)
-4. change test script(test.py)'s algorithm to output the accuracy for the test function in labeling test image. (not urgent)
-5. add llm support to filter long text. (not urgent)
-6. add llm vision(claude) to filter nsfw picture. (not urgent)

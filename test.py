@@ -2,7 +2,7 @@ import unittest
 import time
 import os
 
-from test_function.blip import image_detection 
+from test_function.azure_ocr import image_detection 
 
 class TestImageClassification(unittest.TestCase):
     def setUp(self):

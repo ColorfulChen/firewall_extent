@@ -2,21 +2,28 @@ import time
 import random
 import os
 from datetime import datetime
-from tools.google import google_search_filter,google_search_page_filter,google_search_video_page_filter
+from tools.google import google_search_filter,google_search_page_filter,google_search_video_page_filter,filter_vet_response
 from tools.web import setup_driver
+import time
 
-filter_words = ["airlines","news","Airlines","airline"]
+filter_words = ["airlines","news","Airlines","airline","习近平","六四"]
 
 def response_interceptor(request, response):
     # google
     if 'google.com' in request.url:
-        # if "google.com/search?vet=12" in request.url:
-        #     response.body = ''
-        #     return None    
+        if "google.com/search?vet=12" in request.url:
+            start_time = time.time()
+            response.body = filter_vet_response(response, filter_words)
+            duration = time.time() - start_time
+            print(f"过滤vet请求耗时: {duration:.4f}秒")
+            return None    
         # 1. 过滤搜索建议
         if "google.com/complete/search" in request.url:
             try:
+                start_time = time.time()
                 response.body = google_search_filter(response, filter_words)
+                duration = time.time() - start_time
+                print(f"过滤搜索建议耗时: {duration:.4f}秒")
             except Exception as e:
                 print("Error:", e)
                 pass  # 失败时不做处理
@@ -25,14 +32,20 @@ def response_interceptor(request, response):
                 #过滤视频页面
                 if "udm=7" in request.url:
                     try:
+                        start_time = time.time()
                         response.body = google_search_video_page_filter(response, filter_words)
+                        duration = time.time() - start_time
+                        print(f"过滤视频页面耗时: {duration:.4f}秒")
                     except Exception as e:
                         print("Error:", e)
                         pass
                 #过滤主页面
                 else:
                     try:
+                        start_time = time.time()
                         response.body = google_search_page_filter(response, filter_words)
+                        duration = time.time() - start_time
+                        print(f"过滤主页面耗时: {duration:.4f}秒")
                     except Exception as e:
                         print("Error:", e)
                         pass

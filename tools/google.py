@@ -47,7 +47,7 @@ TARGET_CONTAINERS = [
         ],
         'preserve_rules': []
     },
-{   # 过滤侧边栏下的内容
+    {   # 过滤侧边栏下的内容
         'container': 'div.MBdbL',
         'remove_rules': [
             'div.vNFaUb.uJyGcf',
@@ -67,6 +67,51 @@ TARGET_CONTAINERS = [
             'div.Yr5TG',
         ],
         'preserve_rules': []
+    },
+    {
+        # 过滤侧边栏
+        'container': 'div.A6K0A.z4oRIf',
+        'remove_rules': [
+            'div.osrp-blk',
+            'div.ISATce.OIlTb.VmgTu.QAokWb.PZPZlff',
+            'div.xGj8Mb',
+            'div.vNFaUb.uJyGcf',
+            'div.DoxwDb',
+            'div.VelOt',
+        ],
+        'preserve_rules': []
+    },
+        {
+        # 过滤侧边栏
+        'container': 'div.ULSxyf',
+        'remove_rules': [
+            'div.vCUuC',
+        ],
+        'preserve_rules': []
+    },
+        {
+        # 过滤侧边栏
+        'container': 'div.JCZQSb',
+        'remove_rules': [
+            'div.xGj8Mb',
+        ],
+        'preserve_rules': []
+    },
+        {
+        # 过滤联想搜索
+        'container': 'div.HdbW6.MjUjnf.VM6qJ',
+        'remove_rules': [
+            'div.hHq9Z',
+        ],
+        'preserve_rules': []
+    },
+        {
+        # 过滤book页面
+        'container': 'div.xfX4Ac.JI5uCe.qB9BY.yWNJXb',
+        'remove_rules': [
+            'div.XRVJtc.bnmjfe.aKByQb',
+        ],
+        'preserve_rules': []
     }
 
 ]
@@ -78,6 +123,55 @@ VIDEO_PAGE_CONFIG = {
     ],
     'preserve_rules': []
 }
+
+def filter_vet_response(response,filter_words):
+    """专门处理 google.com/search?vet= 的响应包"""
+    if not hasattr(response, 'body') or not response.body:
+        return None
+
+    content_type = response.headers.get('Content-Type', '')
+
+
+    try:
+        # 解码响应体
+        if 'charset=UTF-8' in content_type or 'charset=utf-8' in content_type:
+            body_text = response.body.decode('utf-8')
+        else:
+            body_text = response.body.decode('latin-1', errors='ignore')
+
+        # 使用BeautifulSoup解析
+        soup = BeautifulSoup(body_text, 'html.parser')
+
+        # 定位目标容器
+        containers = soup.select(VIDEO_PAGE_CONFIG['container'])
+        pattern = re.compile('|'.join(filter_words), flags=re.IGNORECASE)
+
+        removed_count = 0
+        for container in containers:
+            # 检查是否在保留规则中
+            if any(container.select(preserve) for preserve in VIDEO_PAGE_CONFIG['preserve_rules']):
+                continue
+
+            # 检查是否匹配删除规则
+            if any(container.select(rule) for rule in VIDEO_PAGE_CONFIG['remove_rules']):
+                # 关键词检查
+                text_content = container.get_text()
+                if pattern.search(text_content):
+                    container.decompose()  # 删除整个DOM块
+                    removed_count += 1
+
+        if removed_count > 0:
+            print(f"已删除 {removed_count} 个包含关键词的区块")
+            # 生成新HTML并编码
+            filtered_body = str(soup)
+            new_body = filtered_body.encode('utf-8')
+        else:
+            print("未检测到需要删除的内容")
+
+        return new_body
+    except Exception as e:
+        print(f"处理失败: {str(e)}")
+        return response.body  # 返回原始响应体
 
 def google_search_filter(response,filter_words):
     """
@@ -161,7 +255,7 @@ def google_search_page_filter(response, filter_words):
                         print(f"删除元素 [规则: {remove_rule}]")
                         print(f"标签: {element_info['tag']}")
                         print(f"类: {element_info['classes']}")
-                        print(f"ID: {element_info['id']}")
+                        print(f"内容: {str(element)}")
                         print("-" * 40)
 
                         # 删除元素
