@@ -2,63 +2,30 @@ import time
 import random
 import os
 from datetime import datetime
-import requests  # Added import
+from tools.google import google_search_filter,google_search_page_filter,google_search_video_page_filter,filter_vet_response
 from tools.web import setup_driver
+import time
 
 filter_words = ["airlines","news","Airlines","airline","习近平","六四"]
-
-API_BASE_URL = "http://localhost:5000"  # Added API base URL
 
 def response_interceptor(request, response):
     # google
     if 'google.com' in request.url:
         if "google.com/search?vet=12" in request.url:
-            try:
-                start_time = time.time()
-                payload = {
-                    "response": response.body.decode('utf-8', errors='ignore'),
-                    "filter_words": filter_words
-                }
-                api_url = f"{API_BASE_URL}/filter_vet_response"
-                api_resp = requests.post(api_url, json=payload, timeout=10)
-                api_resp.raise_for_status()
-                filtered_body_str = api_resp.json().get("filtered_response")
-                if filtered_body_str is not None:
-                    response.body = filtered_body_str.encode('utf-8')
-                else:
-                    response.body = b''
-                duration = time.time() - start_time
-                print(f"过滤vet请求耗时 (API): {duration:.4f}秒")
-            except requests.exceptions.RequestException as e:
-                print(f"API call to {api_url} failed: {e}")
-                pass
-            except Exception as e:
-                print(f"Error processing API response for vet request: {e}")
-                pass
+            start_time = time.time()
+            response.body = filter_vet_response(response.body.decode('utf-8', errors='ignore'), filter_words)
+            duration = time.time() - start_time
+            print(f"过滤vet请求耗时: {duration:.4f}秒")
             return None    
         # 1. 过滤搜索建议
         if "google.com/complete/search" in request.url:
             try:
                 start_time = time.time()
-                payload = {
-                    "response": response.body.decode('utf-8', errors='ignore'),
-                    "filter_words": filter_words
-                }
-                api_url = f"{API_BASE_URL}/google_search_filter"
-                api_resp = requests.post(api_url, json=payload, timeout=10)
-                api_resp.raise_for_status()
-                filtered_body_str = api_resp.json().get("filtered_response")
-                if filtered_body_str is not None:
-                    response.body = filtered_body_str.encode('utf-8')
-                else:
-                    response.body = b''
+                response.body = google_search_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                 duration = time.time() - start_time
-                print(f"过滤搜索建议耗时 (API): {duration:.4f}秒")
-            except requests.exceptions.RequestException as e:
-                print(f"API call to {api_url} failed: {e}")
-                pass
+                print(f"过滤搜索建议耗时: {duration:.4f}秒")
             except Exception as e:
-                print(f"Error processing API response for search suggestions: {e}")
+                print("Error:", e)
                 pass  # 失败时不做处理
         # 2. 过滤搜索结果
         elif "text/html" in response.headers.get('Content-Type', ''):
@@ -66,49 +33,21 @@ def response_interceptor(request, response):
                 if "udm=7" in request.url:
                     try:
                         start_time = time.time()
-                        payload = {
-                            "response": response.body.decode('utf-8', errors='ignore'),
-                            "filter_words": filter_words
-                        }
-                        api_url = f"{API_BASE_URL}/google_search_video_page_filter"
-                        api_resp = requests.post(api_url, json=payload, timeout=10)
-                        api_resp.raise_for_status()
-                        filtered_body_str = api_resp.json().get("filtered_response")
-                        if filtered_body_str is not None:
-                            response.body = filtered_body_str.encode('utf-8')
-                        else:
-                            response.body = b''
+                        response.body = google_search_video_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                         duration = time.time() - start_time
-                        print(f"过滤视频页面耗时 (API): {duration:.4f}秒")
-                    except requests.exceptions.RequestException as e:
-                        print(f"API call to {api_url} failed: {e}")
-                        pass
+                        print(f"过滤视频页面耗时: {duration:.4f}秒")
                     except Exception as e:
-                        print(f"Error processing API response for video page: {e}")
+                        print("Error:", e)
                         pass
                 #过滤主页面
                 else:
                     try:
                         start_time = time.time()
-                        payload = {
-                            "response": response.body.decode('utf-8', errors='ignore'),
-                            "filter_words": filter_words
-                        }
-                        api_url = f"{API_BASE_URL}/google_search_page_filter"
-                        api_resp = requests.post(api_url, json=payload, timeout=10)
-                        api_resp.raise_for_status()
-                        filtered_body_str = api_resp.json().get("filtered_response")
-                        if filtered_body_str is not None:
-                            response.body = filtered_body_str.encode('utf-8')
-                        else:
-                            response.body = b''
+                        response.body = google_search_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                         duration = time.time() - start_time
-                        print(f"过滤主页面耗时 (API): {duration:.4f}秒")
-                    except requests.exceptions.RequestException as e:
-                        print(f"API call to {api_url} failed: {e}")
-                        pass
+                        print(f"过滤主页面耗时: {duration:.4f}秒")
                     except Exception as e:
-                        print(f"Error processing API response for main page: {e}")
+                        print("Error:", e)
                         pass
 
 if __name__ == "__main__":
