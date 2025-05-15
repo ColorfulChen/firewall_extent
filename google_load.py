@@ -5,6 +5,7 @@ from datetime import datetime
 from tools.google import google_search_filter,google_search_page_filter,google_search_video_page_filter,filter_vet_response
 from tools.web import setup_driver
 import time
+import argparse 
 
 filter_words = ["airlines","news","Airlines","airline","习近平","六四"]
 
@@ -51,7 +52,10 @@ def response_interceptor(request, response):
                         pass
 
 if __name__ == "__main__":
-    driver = setup_driver() 
+    parser = argparse.ArgumentParser(description="Load Google with optional proxy.")
+    parser.add_argument('--proxy', type=str, help='Proxy server port in format host:port (e.g., 127.0.0.1:10809)',default='127.0.0.1:10809')
+    args = parser.parse_args()
+    driver = setup_driver(proxy=args.proxy)
     driver.response_interceptor = response_interceptor
     driver.get('https://www.google.com/')  # 访问目标网站
     input("Press Enter to continue...")
