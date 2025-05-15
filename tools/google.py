@@ -124,21 +124,15 @@ VIDEO_PAGE_CONFIG = {
     'preserve_rules': []
 }
 
-def filter_vet_response(response,filter_words):
+def filter_vet_response(response, filter_words):
     """专门处理 google.com/search?vet= 的响应包"""
-    if not hasattr(response, 'body') or not response.body:
+    if not response:
         return None
-
-    content_type = response.headers.get('Content-Type', '')
 
 
     try:
         # 解码响应体
-        if 'charset=UTF-8' in content_type or 'charset=utf-8' in content_type:
-            body_text = response.body.decode('utf-8')
-        else:
-            body_text = response.body.decode('latin-1', errors='ignore')
-
+        body_text = response
         # 使用BeautifulSoup解析
         soup = BeautifulSoup(body_text, 'html.parser')
 
@@ -171,7 +165,7 @@ def filter_vet_response(response,filter_words):
         return new_body
     except Exception as e:
         print(f"处理失败: {str(e)}")
-        return response.body  # 返回原始响应体
+        return response  # 返回原始响应体
 
 def google_search_filter(response,filter_words):
     """
@@ -179,13 +173,13 @@ def google_search_filter(response,filter_words):
     :param response: 响应对象
     :param filter_words: 需要过滤的词列表
     """
-    decompressed = response.body
+    decompressed = response
     prefix = b")]}'\n"
-    if decompressed.startswith(prefix):
-        json_bytes = decompressed[len(prefix):]
-    else:
-        json_bytes = decompressed
-    data = json.loads(json_bytes)
+    # if decompressed.startswith(prefix):
+    #     json_bytes = decompressed[len(prefix):]
+    # else:
+    #     json_bytes = decompressed
+    data = json.loads(decompressed[len(prefix):])
     filtered = []
     for item in data[0]:
         text = item[0]
@@ -204,12 +198,7 @@ def google_search_page_filter(response, filter_words):
     :param response: 响应对象
     :param filter_words: 需要过滤的词列表
     """
-    try:
-        html = response.body.decode('utf-8')
-    except UnicodeDecodeError:
-        html = response.body.decode('latin-1', errors='ignore')
-
-    soup = BeautifulSoup(html, 'html.parser')
+    soup = BeautifulSoup(response, 'html.parser')
     total_removed = 0
 
     # 创建关键词正则表达式
@@ -276,12 +265,7 @@ def google_search_video_page_filter(response, filter_words):
     :param response: 响应对象
     :param filter_words: 需要过滤的词列表
     """
-    try:
-        html = response.body.decode('utf-8')
-    except UnicodeDecodeError:
-        html = response.body.decode('latin-1', errors='ignore')
-
-    soup = BeautifulSoup(html, 'html.parser')
+    soup = BeautifulSoup(response, 'html.parser')
     total_removed = 0
 
     # 创建关键词正则表达式

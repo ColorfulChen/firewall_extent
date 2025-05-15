@@ -5,4 +5,5 @@ __pycache__/
 responses/
 code_to_be_reviewd/
 .env
-doc/
+doc/ 
+google_selenium_filter.log
