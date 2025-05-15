@@ -13,7 +13,7 @@ def response_interceptor(request, response):
     if 'google.com' in request.url:
         if "google.com/search?vet=12" in request.url:
             start_time = time.time()
-            response.body = filter_vet_response(response, filter_words)
+            response.body = filter_vet_response(response.body.decode('utf-8', errors='ignore'), filter_words)
             duration = time.time() - start_time
             print(f"过滤vet请求耗时: {duration:.4f}秒")
             return None    
@@ -21,7 +21,7 @@ def response_interceptor(request, response):
         if "google.com/complete/search" in request.url:
             try:
                 start_time = time.time()
-                response.body = google_search_filter(response, filter_words)
+                response.body = google_search_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                 duration = time.time() - start_time
                 print(f"过滤搜索建议耗时: {duration:.4f}秒")
             except Exception as e:
@@ -33,7 +33,7 @@ def response_interceptor(request, response):
                 if "udm=7" in request.url:
                     try:
                         start_time = time.time()
-                        response.body = google_search_video_page_filter(response, filter_words)
+                        response.body = google_search_video_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                         duration = time.time() - start_time
                         print(f"过滤视频页面耗时: {duration:.4f}秒")
                     except Exception as e:
@@ -43,7 +43,7 @@ def response_interceptor(request, response):
                 else:
                     try:
                         start_time = time.time()
-                        response.body = google_search_page_filter(response, filter_words)
+                        response.body = google_search_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
                         duration = time.time() - start_time
                         print(f"过滤主页面耗时: {duration:.4f}秒")
                     except Exception as e:
