@@ -4,15 +4,15 @@ import io
 from seleniumwire import webdriver 
 from selenium.webdriver.chrome.options import Options
 
-def setup_driver():
+def setup_driver(proxy='127.0.0.1:10809'):
     """配置浏览器驱动"""
     wire_options = {
         'disable_encoding': True,
         'ignore_http_methods': ['OPTIONS', 'POST'],
         'suppress_connection_errors': True,
         'proxy': {  # 代理设置（如果需要）
-            'http': 'http://127.0.0.1:10809',
-            'https': 'http://127.0.0.1:10809',
+            'http': f'http://{proxy}',
+            'https': f'http://{proxy}',
             'no_proxy': 'localhost,127.0.0.1'
         }
     }
