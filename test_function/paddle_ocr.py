@@ -6,6 +6,7 @@ from paddleocr import PaddleOCR
 from typing import List, Union
 from pydantic import BaseModel
 from enum import Enum
+import re
 
 
 # 配置日志
@@ -24,7 +25,7 @@ class OcrConfig(BaseModel):
     language: OcrLanguage = OcrLanguage.CH
     enable_angle_cls: bool = True
 
-def process_image_data(image_data: Union[str, bytes, np.ndarray], ocr_instance, filter_words: List[str] = None) -> List[dict]:
+def process_image_data(image_data: Union[str, bytes, np.ndarray], ocr_instance) -> List[dict]:
     """统一图像处理函数"""
     try:
         if isinstance(image_data, str):  # 文件路径
@@ -58,10 +59,6 @@ def process_image_data(image_data: Union[str, bytes, np.ndarray], ocr_instance, 
                     else:  # 已经是列表形式
                         position.append(list(map(float, point)))
 
-                # 应用过滤词
-                if filter_words and any(word.lower() in text.lower() for word in filter_words):
-                    continue
-
                 formatted.append({
                     "text": text,
                     "confidence": float(confidence),
@@ -74,37 +71,34 @@ def process_image_data(image_data: Union[str, bytes, np.ndarray], ocr_instance, 
 
 def image_detection_paddle_ocr(image_source: Union[str, bytes], filter_words: List[str] = None, config: OcrConfig = OcrConfig()) -> dict:
     """OCR识别主函数"""
-    try:
-        # 初始化OCR实例
-        ocr_instance = PaddleOCR(
-            # 使用默认模型，也可指定模型，paddle会自动下载模型
-            lang=config.language,
-            # 示例指定模型，没有也会自动下载
-            # det_model_dir='./paddle_models/det',  # 检测模型路径
-            # rec_model_dir='./paddle_models/rec',  # 识别模型路径
+    # 初始化OCR实例
+    ocr_instance = PaddleOCR(
+        # 使用默认模型，也可指定模型，paddle会自动下载模型
+        lang=config.language,
+        # 示例指定模型，没有也会自动下载
+        # det_model_dir='./paddle_models/det',  # 检测模型路径
+        # rec_model_dir='./paddle_models/rec',  # 识别模型路径
 
-            use_angle_cls=config.enable_angle_cls,
-            use_gpu=config.use_gpu,
-            show_log=False
-        )
+        use_angle_cls=config.enable_angle_cls,
+        use_gpu=config.use_gpu,
+        show_log=False
+    )
 
-        # 处理图像
-        result = process_image_data(image_source, ocr_instance, filter_words)
+    # 处理图像
+    ocr_results = process_image_data(image_source, ocr_instance)
+    contain_bad_word = False
 
-        # 获取文件名
-        if isinstance(image_source, str):
-            filename = os.path.basename(image_source)
-        else:
-            filename = "from_bytes.jpg"
+    if ocr_results:
+        ocr_text = ''
+        for text in ocr_results:
+            ocr_text = ocr_text + text['text']
 
-        return {
-            "success": True,
-            "filename": filename,
-            "result": result
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "filename": "unknown"
-        }
+        if any(re.search(word, text) for word in filter_words):
+            contain_bad_word = True
+
+    return_json = {
+        'filter_result': contain_bad_word,
+        'ocr_result': ocr_results
+    }
+
+    return return_json
