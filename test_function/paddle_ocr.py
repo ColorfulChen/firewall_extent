@@ -9,6 +9,7 @@ from typing import List,  Union
 from pydantic import BaseModel
 from enum import Enum
 import uvicorn
+import re
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -149,9 +150,26 @@ async def image_detection_async(image_source: Union[UploadFile, bytes, str], con
         }
 
 # 兼容接口
-def image_detection(image_source: Union[str, bytes], config: OcrConfig = OcrConfig()) -> dict:
+# {'success': True, 'filename': '102.png', 'result': [{'text': 'Boehhone', 'confidence': 0.6342410445213318, 'position': [[26.0, 24.0], [211.0, 0.0], [215.0, 41.0], [31.0, 65.0]]}]}
+
+def image_detection_paddle_ocr(image_source: Union[str, bytes], config: OcrConfig = OcrConfig(), filter_words = []) -> dict:
     """兼容接口，自动选择本地测试或本地服务器api"""
-    return image_detection_sync(image_source, config)
+    ocr_results = image_detection_sync(image_source, config)
+    contain_bad_word = False
+    if ocr_results['success'] == True:
+        ocr_text = ''
+        for text in ocr_results['result']:
+            ocr_text = ocr_text + text['text']
+
+        if any(re.search(word, text) for word in filter_words):
+            contain_bad_word = True
+
+    return_json = {
+        'filter_result': contain_bad_word,
+        'ocr_result': ocr_results
+    }
+
+    return return_json
 
 @app.post("/ocr/single")
 async def api_image_detection(

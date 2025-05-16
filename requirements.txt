@@ -1,13 +1,29 @@
+#for broswer
+requests
+selenium-wire
+
+#for api server
+flask
+jinja2
+blinker==1.7.0
+
+#for azure_ocr
 # azure-cognitiveservices-vision-computervision
 # pillow
 # azure-ai-vision-imageanalysis
 # alibabacloud_green20220302==2.20.0
 # oss2
-# Jinja2
 # MarkupSafe
 # accelerate
-flask
-jinja2
-requests
-selenium-wire
-blinker==1.7.0
+
+#for ocr server
+paddlepaddle
+paddleocr
+fastapi
+uvicorn
+opencv-python
+numpy
+pydantic
+python-multipart
+#conda install paddlepaddle==3.0.0 -c paddle
+
