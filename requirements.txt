@@ -19,11 +19,11 @@ blinker==1.7.0
 #for ocr server
 paddlepaddle
 paddleocr
-fastapi
-uvicorn
 opencv-python
 numpy
 pydantic
 python-multipart
 #conda install paddlepaddle==3.0.0 -c paddle
+
+
 
