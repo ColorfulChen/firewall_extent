@@ -1,8 +1,27 @@
 import unittest
 import time
 import os
+import requests
+import base64
 
-from test_function.azure_ocr import image_detection 
+#from test_function.paddle_ocr import image_detection 
+
+API_BASE_URL = "http://localhost:5000"
+
+def image_detection(image_path,filter_words = []):
+    with open(image_path, "rb") as f:
+        image_data = f.read()
+    base64_image = base64.b64encode(image_data).decode('utf-8')
+
+    payload = {
+        "image": base64_image,
+        "filter_words": filter_words
+    }
+    api_url = f"{API_BASE_URL}/image_detection_paddle_ocr"
+    api_resp = requests.post(api_url, json=payload, timeout=10)
+    api_resp.raise_for_status()
+    result = api_resp.json()
+    return result if result else None
 
 class TestImageClassification(unittest.TestCase):
     def setUp(self):
