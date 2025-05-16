@@ -8,6 +8,7 @@ import cv2
 from typing import List,  Union
 from pydantic import BaseModel
 from enum import Enum
+import uvicorn
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -164,5 +165,5 @@ async def api_image_detection(
     return JSONResponse(result)
 
 if __name__ == "__main__":
-    import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
