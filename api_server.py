@@ -157,6 +157,3 @@ def api_image_detection_paddle_ocr_local_file():
 if __name__ == '__main__':
     # 开发模式
     app.run(debug=True, port=5000)
-    
-    # 生产模式 - 使用 gunicorn
-    # 启动命令: gunicorn --worker-class=gevent --workers=4 --bind=0.0.0.0:5000 api_server:app
