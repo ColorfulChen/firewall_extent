@@ -6,9 +6,8 @@ selenium-wire
 flask
 jinja2
 blinker==1.7.0
-gunicorn  # 生产级WSGI服务器
-gevent  # 异步处理库
-flask-compress  # 响应压缩
+flask-compress
+
 
 #for azure_ocr
 # azure-cognitiveservices-vision-computervision
