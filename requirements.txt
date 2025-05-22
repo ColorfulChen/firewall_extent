@@ -1,6 +1,9 @@
+python-dotenv
+
 #for broswer
 requests
 selenium-wire
+beautifulsoup4
 
 #for api server
 flask
@@ -20,6 +23,7 @@ blinker==1.7.0
 paddlepaddle
 paddleocr
 opencv-python
+#opencv-python-headless
 numpy
 pydantic
 python-multipart

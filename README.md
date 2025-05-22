@@ -7,6 +7,8 @@ TODO：
 4. 关键词（正则）
 5. 改成flask api服务，提供json这边返回。
 6. 性能指标（？）
+7. Dockerfile
+8. 系统用的是AST插件制作，后期可能会需要改成插件。 https://docs.trafficserver.apache.org/en/9.2.x/developer-guide/plugins/index.en.html ATS官方的插件开发文档
 
 六月中期，五月底之前需要
 
