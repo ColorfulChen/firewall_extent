@@ -8,8 +8,4 @@ make
 make install
 cd ..
 cd ..
-<<<<<<< HEAD
 rm -r ccache
-=======
-rm -r ccache
->>>>>>> 0f615d6116f518e071f9ff37d57ff3accfc6d305
