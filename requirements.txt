@@ -23,7 +23,7 @@ blinker==1.7.0
 paddlepaddle
 paddleocr
 opencv-python
-#opencv-python-headless
+opencv-python-headless
 numpy
 pydantic
 python-multipart
