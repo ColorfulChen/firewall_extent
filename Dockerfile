@@ -13,6 +13,7 @@ RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 5000
 RUN sed -i 's/app.run(debug=True, port=5000)/app.run(host="0.0.0.0", debug=True, port=5000)/g' api_server.py
+RUN python test_function/paddle_ocr.py
 CMD ["python", "api_server.py"]
 # docker build -t firewall_extent .
 # docker run -p 5000:5000 firewall_extent
