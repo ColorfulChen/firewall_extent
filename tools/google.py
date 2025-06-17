@@ -5,6 +5,23 @@ import gzip
 import io
 from bs4 import BeautifulSoup
 import hashlib
+import os
+from pymongo import MongoClient
+from datetime import datetime
+
+# MongoDB 配置
+MONGO_CONNECTION_STRING = os.environ.get("DATABASE_BASE_URL", "mongodb://localhost:27017/")
+MONGO_DB_NAME = "google_filter_logs"
+MONGO_COLLECTION_NAME = "filtered_items"
+
+# 初始化MongoDB连接
+try:
+    mongo_client = MongoClient(MONGO_CONNECTION_STRING)
+    db = mongo_client[MONGO_DB_NAME]
+    collection = db[MONGO_COLLECTION_NAME]
+except Exception as e:
+    print(f"Failed to connect to MongoDB: {e}")
+    collection = None
 
 TARGET_CONTAINERS = [
     {
@@ -124,6 +141,17 @@ VIDEO_PAGE_CONFIG = {
     'preserve_rules': []
 }
 
+def log_to_mongo(data):
+    """将数据记录到MongoDB"""
+    if collection is None:
+        return
+
+    try:
+        data["timestamp"] = datetime.utcnow()
+        collection.insert_one(data)
+    except Exception as e:
+        print(f"Failed to log to MongoDB: {e}")
+
 def filter_vet_response(response, filter_words):
     """专门处理 google.com/search?vet= 的响应包"""
     if not response:
@@ -151,6 +179,16 @@ def filter_vet_response(response, filter_words):
                 # 关键词检查
                 text_content = container.get_text()
                 if pattern.search(text_content):
+                    # 记录删除的过滤条目
+                    log_to_mongo({
+                        "type": "vet_page_filter",
+                        "action": "removed_container",
+                        "content": str(container),
+                        "filter_words": filter_words,
+                        "container_selector": VIDEO_PAGE_CONFIG['container'],
+                        "remove_rules": VIDEO_PAGE_CONFIG['remove_rules']
+                    })
+
                     container.decompose()  # 删除整个DOM块
                     removed_count += 1
 
@@ -187,6 +225,14 @@ def google_search_filter(response,filter_words):
             filtered.append(item)
         else:
             print(f"Filtered out: {text}")
+            # 记录删除的过滤条目
+            log_to_mongo({
+                "type": "search_suggestion",
+                "action": "filtered",
+                "text": text,
+                "filter_words": filter_words,
+                "original_data": item
+            })
     data[0] = filtered
     new_json = json.dumps(data, ensure_ascii=False).encode("utf-8")
     new_body = prefix + new_json
@@ -246,6 +292,14 @@ def google_search_page_filter(response, filter_words):
                         print(f"类: {element_info['classes']}")
                         print(f"内容: {str(element)}")
                         print("-" * 40)
+                        # 记录删除的过滤条目
+                        log_to_mongo({
+                            "type": "search_page_filter",
+                            "action": "removed_element",
+                            "element_info": element_info,
+                            "filter_words": filter_words,
+                            "container_config": container_config
+                        })
 
                         # 删除元素
                         element.decompose()
@@ -310,6 +364,14 @@ def google_search_video_page_filter(response, filter_words):
                         print(f"类: {element_info['classes']}")
                         print(f"ID: {element_info['id']}")
                         print("-" * 40)
+                        # 记录删除的过滤条目
+                        log_to_mongo({
+                            "type": "video_page_filter",
+                            "action": "removed_element",
+                            "element_info": element_info,
+                            "filter_words": filter_words,
+                            "container_config": container_config
+                        })
 
                         # 删除元素
                         element.decompose()

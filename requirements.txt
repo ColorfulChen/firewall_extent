@@ -4,6 +4,7 @@ python-dotenv
 requests
 selenium-wire
 beautifulsoup4
+pymongo
 
 #for api server
 flask
