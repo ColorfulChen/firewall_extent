@@ -8,6 +8,9 @@ import hashlib
 import os
 from pymongo import MongoClient
 from datetime import datetime
+from dotenv import load_dotenv()
+
+load_dotenv()
 
 # MongoDB 配置
 MONGO_CONNECTION_STRING = os.environ.get("DATABASE_BASE_URL", "mongodb://localhost:27017/")
