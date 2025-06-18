@@ -8,7 +8,7 @@ import hashlib
 import os
 from pymongo import MongoClient
 from datetime import datetime
-from dotenv import load_dotenv()
+from dotenv import load_dotenv
 
 load_dotenv()
 
