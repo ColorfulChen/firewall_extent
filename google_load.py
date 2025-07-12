@@ -2,7 +2,9 @@ import time
 import random
 import os
 from datetime import datetime
-from tools.google import google_search_filter,google_search_page_filter,google_search_video_page_filter,filter_vet_response
+from tools.database import cleanup_old_collections
+from tools.google import google_search_filter, google_search_page_filter, google_search_video_page_filter, \
+    filter_vet_response, filter_scholar_response
 from tools.web import setup_driver
 import time
 import argparse 
@@ -50,11 +52,30 @@ def response_interceptor(request, response):
                     except Exception as e:
                         print("Error:", e)
                         pass
+    if "scholar.google.com" in request.url:
+        print(request.url)
+        print(response.headers.get('Content-Type', ''))
+        if "text/html" in response.headers.get('Content-Type', ''):
+            try:
+                start_time = time.time()
+                response.body = filter_scholar_response(response.body.decode('utf-8', errors='ignore'), filter_words,
+                                                        request.url)
+                duration = time.time() - start_time
+                print(f"过滤Google学术耗时: {duration:.4f}秒")
+                return None
+            except Exception as e:
+                print("Error:", e)
+                return None
+    return None
 
 if __name__ == "__main__":
+    # 清理旧集合
+    cleanup_old_collections(days=7)
+    # 设置代理
     parser = argparse.ArgumentParser(description="Load Google with optional proxy.")
     parser.add_argument('--proxy', type=str, help='Proxy server port in format host:port (e.g., 127.0.0.1:10809)',default='127.0.0.1:10809')
     args = parser.parse_args()
+    # 启动浏览器
     driver = setup_driver(proxy=args.proxy)
     driver.response_interceptor = response_interceptor
     driver.get('https://www.google.com/')  # 访问目标网站
