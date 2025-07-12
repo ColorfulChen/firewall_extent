@@ -6,125 +6,16 @@ import io
 from bs4 import BeautifulSoup
 import hashlib
 
-TARGET_CONTAINERS = [
-    {
-        # 容器选择器
-        'container': 'div.s6JM6d.ufC5Cb',
-        # 要删除的元素选择器列表
-        'remove_rules': [
-            'div.xfX4Ac.JI5uCe.qB9BY.yWNJXb.qzPQNd',
-            'div.xfX4Ac.JI5uCe.qB9BY.yWNJXb.tQtKhb',
-            'div.PmEWq.wHYlTd.vt6azd.Ww4FFb',
-            'div.SoaBEf'
-        ],
-        'preserve_rules': []
-    },
-    {   # 过滤people also ask 下的内容
-        'container': 'div.LQCGqc',
-        'remove_rules': [
-            'div[jsname="yEVEwb"]',
-        ],
-        'preserve_rules': []
-    },
-    { # 过滤全部页面下的video下的内容
-        'container': 'div.Ea5p3b',
-        'remove_rules': [
-            'div.sHEJob',
-        ],
-        'preserve_rules': []
-    },
-    {  # 过滤people also search for 下的内容
-        'container': 'div.AJLUJb',
-        'remove_rules': [
-            'div.b2Rnsc.vIifob',
-        ],
-        'preserve_rules': []
-    },
-    {
-        'container': 'div.MjjYud ',
-        'remove_rules': [
-            'div.wHYlTd.Ww4FFb.vt6azd.tF2Cxc.asEBEc' # # 过滤 Forums 和web 页面下的内容
-        ],
-        'preserve_rules': []
-    },
-    {   # 过滤侧边栏下的内容
-        'container': 'div.MBdbL',
-        'remove_rules': [
-            'div.vNFaUb.uJyGcf',
-        ],
-        'preserve_rules': []
-    },
-    {  #过滤video页面
-        'container': 'div.MjjYud > div ',
-        'remove_rules': [
-            'div.PmEWq.wHYlTd.vt6azd.Ww4FFb',
-        ],
-        'preserve_rules': []
-    },
-    {   #过滤book页面
-        'container': 'div[data-hveid="CAMQAA"]',
-        'remove_rules': [
-            'div.Yr5TG',
-        ],
-        'preserve_rules': []
-    },
-    {
-        # 过滤侧边栏
-        'container': 'div.A6K0A.z4oRIf',
-        'remove_rules': [
-            'div.osrp-blk',
-            'div.ISATce.OIlTb.VmgTu.QAokWb.PZPZlff',
-            'div.xGj8Mb',
-            'div.vNFaUb.uJyGcf',
-            'div.DoxwDb',
-            'div.VelOt',
-        ],
-        'preserve_rules': []
-    },
-        {
-        # 过滤侧边栏
-        'container': 'div.ULSxyf',
-        'remove_rules': [
-            'div.vCUuC',
-        ],
-        'preserve_rules': []
-    },
-        {
-        # 过滤侧边栏
-        'container': 'div.JCZQSb',
-        'remove_rules': [
-            'div.xGj8Mb',
-        ],
-        'preserve_rules': []
-    },
-        {
-        # 过滤联想搜索
-        'container': 'div.HdbW6.MjUjnf.VM6qJ',
-        'remove_rules': [
-            'div.hHq9Z',
-        ],
-        'preserve_rules': []
-    },
-        {
-        # 过滤book页面
-        'container': 'div.xfX4Ac.JI5uCe.qB9BY.yWNJXb',
-        'remove_rules': [
-            'div.XRVJtc.bnmjfe.aKByQb',
-        ],
-        'preserve_rules': []
-    }
+from tools.config_loader import get_scholar_page_configs,get_video_page_config,get_target_containers
+from tools.database import log_to_mongo
 
-]
+# 配置删除规则
+TARGET_CONTAINERS = get_target_containers()
+VIDEO_PAGE_CONFIG = get_video_page_config()
+SCHOLAR_PAGE_CONFIGS = get_scholar_page_configs()
 
-VIDEO_PAGE_CONFIG = {
-    'container': 'div.MjjYud > div',
-    'remove_rules': [
-        'div.PmEWq.wHYlTd.vt6azd.Ww4FFb',
-    ],
-    'preserve_rules': []
-}
 
-def filter_vet_response(response, filter_words):
+def filter_vet_response(response, filter_words, request_url=None):
     """专门处理 google.com/search?vet= 的响应包"""
     if not response:
         return None
@@ -151,6 +42,16 @@ def filter_vet_response(response, filter_words):
                 # 关键词检查
                 text_content = container.get_text()
                 if pattern.search(text_content):
+                    # 记录删除的过滤条目
+                    log_to_mongo({
+                        "type": "vet_page_filter",
+                        "action": "removed_container",
+                        "content": str(container),
+                        "filter_words": filter_words,
+                        "container_selector": VIDEO_PAGE_CONFIG['container'],
+                        "remove_rules": VIDEO_PAGE_CONFIG['remove_rules']
+                    }, request_url)
+
                     container.decompose()  # 删除整个DOM块
                     removed_count += 1
 
@@ -167,7 +68,7 @@ def filter_vet_response(response, filter_words):
         print(f"处理失败: {str(e)}")
         return response  # 返回原始响应体
 
-def google_search_filter(response,filter_words):
+def google_search_filter(response,filter_words, request_url=None):
     """
     过滤谷歌联想词的函数
     :param response: 响应对象
@@ -187,12 +88,22 @@ def google_search_filter(response,filter_words):
             filtered.append(item)
         else:
             print(f"Filtered out: {text}")
+
+            # 记录删除的过滤条目
+            log_to_mongo({
+                "type": "search_suggestion",
+                "action": "filtered",
+                "text": text,
+                "filter_words": filter_words,
+                "original_data": item
+            }, request_url)
+
     data[0] = filtered
     new_json = json.dumps(data, ensure_ascii=False).encode("utf-8")
     new_body = prefix + new_json
     return new_body
 
-def google_search_page_filter(response, filter_words):
+def google_search_page_filter(response, filter_words, request_url=None):
     """
     多目标深度删除
     :param response: 响应对象
@@ -247,6 +158,15 @@ def google_search_page_filter(response, filter_words):
                         print(f"内容: {str(element)}")
                         print("-" * 40)
 
+                        # 记录删除的过滤条目
+                        log_to_mongo({
+                            "type": "search_page_filter",
+                            "action": "removed_element",
+                            "element_info": element_info,
+                            "filter_words": filter_words,
+                            "container_config": container_config
+                        }, request_url)
+
                         # 删除元素
                         element.decompose()
                         container_removed += 1
@@ -259,7 +179,7 @@ def google_search_page_filter(response, filter_words):
     modified_html = str(soup)
     return modified_html.encode('utf-8')
 
-def google_search_video_page_filter(response, filter_words):
+def google_search_video_page_filter(response, filter_words, request_url=None):
     """
     多目标深度删除
     :param response: 响应对象
@@ -311,6 +231,15 @@ def google_search_video_page_filter(response, filter_words):
                         print(f"ID: {element_info['id']}")
                         print("-" * 40)
 
+                        # 记录删除的过滤条目
+                        log_to_mongo({
+                            "type": "video_page_filter",
+                            "action": "removed_element",
+                            "element_info": element_info,
+                            "filter_words": filter_words,
+                            "container_config": VIDEO_PAGE_CONFIG
+                        }, request_url)
+
                         # 删除元素
                         element.decompose()
                         total_removed += 1
@@ -349,3 +278,57 @@ def get_decoded_body(response):
 def calculate_hash(content):
 # """计算内容的哈希值"""
     return hashlib.md5(content.encode('utf-8')).hexdigest()
+
+def filter_scholar_response(response, filter_words, request_url=None):
+    """专门处理Google学术搜索结果"""
+    if not response:
+        return None
+
+    try:
+        soup = BeautifulSoup(response, 'html.parser')
+        pattern = re.compile('|'.join(filter_words), flags=re.IGNORECASE)
+        total_removed = 0
+
+        # 处理每个学术页面配置
+        for config in SCHOLAR_PAGE_CONFIGS:
+            containers = soup.select(config['container'])
+
+            for container in containers:
+                # 检查是否在保留规则中
+                preserved_elements = []
+                for preserve_rule in config['preserve_rules']:
+                    preserved_elements.extend(container.select(preserve_rule))
+
+                # 检查是否匹配删除规则
+                for remove_rule in config['remove_rules']:
+                    for element in container.select(remove_rule):
+                        if element in preserved_elements:
+                            continue
+
+                        # 关键词检查
+                        text_content = element.get_text()
+                        if pattern.search(text_content):
+                            log_to_mongo({
+                                "type": "scholar_page_filter",
+                                "action": "removed_element",
+                                "element_info": {
+                                    'tag': element.name,
+                                    'classes': element.get('class', []),
+                                    'id': element.get('id'),
+                                    'rule': remove_rule,
+                                    'container': config['container']
+                                },
+                                "filter_words": filter_words,
+                                "container_config": config
+                            }, request_url)
+
+                            element.decompose()
+                            total_removed += 1
+
+        if total_removed > 0:
+            print(f"已删除 {total_removed} 个学术搜索结果")
+            return str(soup).encode('utf-8')
+        return response.encode('utf-8') if isinstance(response, str) else response
+    except Exception as e:
+        print(f"学术结果处理失败: {str(e)}")
+        return response.encode('utf-8') if isinstance(response, str) else response
