@@ -1,6 +1,5 @@
 import os
 import time
-import random
 import argparse
 from datetime import datetime
 from typing import List
@@ -13,6 +12,7 @@ from tools.google import (
 from tools.google_scholar import (
   google_scholar_search_filter,
   google_scholar_search_page_filter
+)
 from tools.web import setup_driver
 
 FILTER_WORDS: List[str] = ["airlines", "news", "Airlines", "airline", "习近平", "六四"]
@@ -30,7 +30,7 @@ def response_interceptor(request, response):
           if "scholar.google.com/scholar_complete" in url:
               try:
                   start_time = time.time()
-                  response.body = google_scholar_search_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                  response.body = google_scholar_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
                   duration = time.time() - start_time
                   print(f"过滤搜索建议耗时: {duration:.4f}秒")
               except Exception as e:
@@ -41,7 +41,7 @@ def response_interceptor(request, response):
               #过滤主页面
               try:
                   start_time = time.time()
-                  response.body = google_scholar_search_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                  response.body = google_scholar_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
                   duration = time.time() - start_time
                   print(f"过滤主页面耗时: {duration:.4f}秒")
               except Exception as e:
@@ -49,7 +49,7 @@ def response_interceptor(request, response):
                   pass
       # google search
       elif 'google.com' in url:
-          if "google.com/search?vet=12" in request.url:
+        if "google.com/search?vet=12" in request.url:
             start_time = time.time()
             response.body = filter_vet_response(
                 response.body.decode('utf-8', errors='ignore'),
@@ -58,7 +58,7 @@ def response_interceptor(request, response):
             print(f"过滤vet请求耗时: {time.time() - start_time:.4f}秒")
             return
         # 2. Filter search suggestions
-        if "google.com/complete/search" in url:
+        elif "google.com/complete/search" in url:
             start_time = time.time()
             response.body = google_search_filter(
                 response.body.decode('utf-8', errors='ignore'),
@@ -66,12 +66,10 @@ def response_interceptor(request, response):
             )
             print(f"过滤搜索建议耗时: {time.time() - start_time:.4f}秒")
             return
-
         # 3. Filter HTML search results (main and video pages)
         if "text/html" in content_type:
             start_time = time.time()
             decoded_body = response.body.decode('utf-8', errors='ignore')
-
             if "udm=7" in url:
                 response.body = google_search_video_page_filter(decoded_body, FILTER_WORDS)
                 print(f"过滤视频页面耗时: {time.time() - start_time:.4f}秒")
