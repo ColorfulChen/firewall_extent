@@ -10,6 +10,9 @@ from tools.google import (
     google_search_video_page_filter,
     filter_vet_response,
 )
+from tools.google_scholar import (
+  google_scholar_search_filter,
+  google_scholar_search_page_filter
 from tools.web import setup_driver
 
 FILTER_WORDS: List[str] = ["airlines", "news", "Airlines", "airline", "习近平", "六四"]
@@ -20,10 +23,33 @@ def response_interceptor(request, response):
     """
     url = request.url
     content_type = response.headers.get('Content-Type', '')
-
     try:
-        # 1. Filter vet requests
-        if "google.com/search?vet=12" in url:
+    # google scholar
+      if 'scholar.google.com' in url: 
+          # 1. 过滤搜索建议
+          if "scholar.google.com/scholar_complete" in url:
+              try:
+                  start_time = time.time()
+                  response.body = google_scholar_search_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                  duration = time.time() - start_time
+                  print(f"过滤搜索建议耗时: {duration:.4f}秒")
+              except Exception as e:
+                  print("Error:", e)
+                  pass  # 失败时不做处理
+          # 2. 过滤搜索结果
+          elif "scholar.google.com/scholar" in url and "text/html" in content_type:
+              #过滤主页面
+              try:
+                  start_time = time.time()
+                  response.body = google_scholar_search_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                  duration = time.time() - start_time
+                  print(f"过滤主页面耗时: {duration:.4f}秒")
+              except Exception as e:
+                  print("Error:", e)
+                  pass
+      # google search
+      elif 'google.com' in url:
+          if "google.com/search?vet=12" in request.url:
             start_time = time.time()
             response.body = filter_vet_response(
                 response.body.decode('utf-8', errors='ignore'),
@@ -31,7 +57,6 @@ def response_interceptor(request, response):
             )
             print(f"过滤vet请求耗时: {time.time() - start_time:.4f}秒")
             return
-
         # 2. Filter search suggestions
         if "google.com/complete/search" in url:
             start_time = time.time()
