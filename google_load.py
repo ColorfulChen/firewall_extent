@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import argparse
 from datetime import datetime
@@ -14,6 +15,9 @@ from tools.google_scholar import (
   google_scholar_search_page_filter
 )
 from tools.web import setup_driver
+from tools.wiki_filter import wiki_search_filter, wiki_search_page_filter, extract_wiki_title,wiki_suggestions_filter, inject_content, wiki_content_filter
+from tools.mongodb import cleanup_old_collections
+
 
 FILTER_WORDS: List[str] = ["airlines", "news", "Airlines", "airline", "习近平", "六四"]
 
@@ -76,6 +80,45 @@ def response_interceptor(request, response):
                 else:
                     response.body = google_search_page_filter(decoded_body, FILTER_WORDS)
                     print(f"过滤主页面耗时: {time.time() - start_time:.4f}秒")
+        if "/zh.wikipedia.org" in request.url:
+            content_type = response.headers.get('Content-Type', '')
+            if "/search/title?q" in request.url:
+                try:
+                    start_time = time.time()
+                    response.body = wiki_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS, request.url)
+                    duration = time.time() - start_time
+                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+                except Exception as e:
+                    print("Error:", e)
+                    pass  # 失败时不做处理
+            if "w/api.php?action=" in request.url:
+                try:
+                    start_time = time.time()
+                    response.body = wiki_suggestions_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS, request.url)
+                    duration = time.time() - start_time
+                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+                except Exception as e:
+                    print("Error:", e)
+                    pass  # 失败时不做处理
+            if "w/index.php?" in request.url:
+                try:
+                    start_time = time.time()
+                    response.body = wiki_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS, request.url)
+                    duration = time.time() - start_time
+                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+                except Exception as e:
+                    print("Error:", e)
+                    pass  # 失败时不做处理
+            if "/wiki/" in request.url and 'text/html' in content_type:
+                decoded_title = extract_wiki_title(request.url)
+                for word in FILTER_WORDS:
+                    if re.search(re.escape(word), decoded_title, re.IGNORECASE):
+                        response.body = inject_content(response.body.decode('utf-8', errors='ignore'))
+                        break
+                if "/Wikipedia:" in request.url:
+                    response.body = wiki_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS, request.url)
+                else:
+                    response.body = wiki_content_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS, request.url)
     except Exception as e:
         print(f"Error in response_interceptor for URL {url}: {e}")
 
@@ -114,6 +157,8 @@ def main():
     args = parser.parse_args()
 
     try:
+        # 清理旧集合
+        cleanup_old_collections(days=30)
         driver = setup_driver(proxy=args.proxy)
         driver.response_interceptor = response_interceptor
         driver.get('https://www.google.com/')
