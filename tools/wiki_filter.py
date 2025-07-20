@@ -72,7 +72,7 @@ WIKI_PAGE_CONTAINERS = [
 WIKI_CONTENT_CONFIG = [
     {
         'container': 'div.mw-content-ltr.mw-parser-output',  # 容器选择器
-        'block_start': 'div.mw-heading.mw-heading3',  # 块起始选择器
+        'block_start': 'div.mw-heading',  # 块起始选择器
         'block_processing': True
     },
 ]
