@@ -1,5 +1,4 @@
 import os
-import re
 import time
 import argparse
 from datetime import datetime
@@ -80,8 +79,10 @@ def response_interceptor(request, response):
                 else:
                     response.body = google_search_page_filter(decoded_body, FILTER_WORDS)
                     print(f"过滤主页面耗时: {time.time() - start_time:.4f}秒")
+        #wikipedia
         elif "/zh.wikipedia.org" in request.url:
             content_type = response.headers.get('Content-Type', '')
+            #wiki百科首页搜索栏
             if "/search/title?q" in request.url:
                 try:
                     start_time = time.time()
@@ -92,6 +93,7 @@ def response_interceptor(request, response):
                 except Exception as e:
                     print("Error:", e)
                     pass  # 失败时不做处理
+            #wiki百科搜索页搜索栏
             if "w/api.php?action=" in request.url:
                 try:
                     start_time = time.time()
@@ -102,6 +104,7 @@ def response_interceptor(request, response):
                 except Exception as e:
                     print("Error:", e)
                     pass  # 失败时不做处理
+            #wiki百科页面
             if "w/index.php?" in request.url:
                 try:
                     start_time = time.time()
@@ -112,6 +115,7 @@ def response_interceptor(request, response):
                 except Exception as e:
                     print("Error:", e)
                     pass  # 失败时不做处理
+            #wiki百科标题
             if "/wiki/" in request.url and 'text/html' in content_type:
 
                 decoded_title = extract_wiki_title(request.url)
