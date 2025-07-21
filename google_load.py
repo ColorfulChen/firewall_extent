@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+import re
 from datetime import datetime
 from typing import List
 from tools.google import (
@@ -13,10 +14,16 @@ from tools.google_scholar import (
   google_scholar_search_filter,
   google_scholar_search_page_filter
 )
+from tools.wiki_filter import (
+    wiki_search_filter, 
+    wiki_suggestions_filter, 
+    wiki_search_page_filter, 
+    extract_wiki_title, 
+    inject_content, 
+    wiki_content_filter
+)
 from tools.mongodb import cleanup_old_collections
 from tools.web import setup_driver
-from tools.wiki_filter import wiki_search_filter, wiki_suggestions_filter, wiki_search_page_filter, extract_wiki_title, \
-    inject_content, wiki_content_filter
 
 FILTER_WORDS: List[str] = ["airlines", "news", "Airlines", "airline", "习近平", "六四"]
 
