@@ -226,6 +226,7 @@ def wiki_suggestions_filter(response, filter_words, request_url=None):
 
 def wiki_search_page_filter(response, filter_words,request_url=None):
     """
+    wiki百科页面过滤
     """
     if not response:
         return None
