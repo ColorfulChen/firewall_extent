@@ -1,13 +1,14 @@
 import time
 import random
+import re
 import os
 from datetime import datetime
-from tools.hugging_face import hugging_face_quick_search_filter,hugging_face_card_page_filter,hugging_face_models_search_json_filter,hugging_face_models_search_page_filter,hugging_face_datasets_search_json_filter,hugging_face_datasets_search_page_filter,hugging_face_spaces_search_json_filter,hugging_face_spaces_search_page_filter,hugging_face_collections_search_json_filter,hugging_face_collections_search_page_filter,hugging_face_blogs_search_page_filter,hugging_face_blogs_community_page_filter,hugging_face_posts_search_page_filter,hugging_face_posts_search_json_filter,hugging_face_discuss_topics_search_json_filter,hugging_face_discuss_topics_search_page_filter,hugging_face_discuss_posts_json_filter,hugging_face_discuss_posts_page_filter
+from tools.hugging_face import hugging_face_quick_search_filter,hugging_face_card_page_filter,hugging_face_models_search_json_filter,hugging_face_models_search_page_filter,hugging_face_datasets_search_json_filter,hugging_face_datasets_search_page_filter,hugging_face_spaces_search_json_filter,hugging_face_spaces_search_page_filter,hugging_face_collections_search_json_filter,hugging_face_collections_search_page_filter,hugging_face_blogs_search_page_filter,hugging_face_blogs_community_page_filter,hugging_face_posts_search_page_filter,hugging_face_posts_search_json_filter,hugging_face_discuss_topics_search_json_filter,hugging_face_discuss_topics_search_page_filter,hugging_face_discuss_posts_json_filter,hugging_face_discuss_posts_page_filter,hugging_face_index_page_filter,hugging_face_organizations_page_filter,hugging_face_fulltext_search_page_filter,hugging_face_fulltext_search_json_filter
 from tools.web import setup_driver
 import time
 import argparse 
 
-filter_words = ["airlines","news","Airlines","airline","习近平","六四","防火墙技术","chatgpt","gpt","kimi"]
+filter_words = ["airlines","news","Airlines","airline","习近平","六四","防火墙技术","chatgpt","gpt","kimi",'GPT']
 
 def response_interceptor(request, response):
     # hugging face
@@ -23,6 +24,27 @@ def response_interceptor(request, response):
             except Exception as e:
                 print("Error:", e)
                 pass  # 失败时不做处理
+        # 过滤全文搜索结果页面
+        elif "huggingface.co/search/full-text" in request.url:
+            try:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_fulltext_search_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                duration = time.time() - start_time
+                print(f"过滤full-search页面耗时: {duration:.4f}秒")
+            except Exception as e:
+                print("Error:", e)
+                pass
+        #过滤全文搜索结果json
+        elif "huggingface.co/api/search/full-text" in request.url:
+            try:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_fulltext_search_json_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                duration = time.time() - start_time
+                print(f"过滤full-search json耗时: {duration:.4f}秒")
+            except Exception as e:
+                print("Error:", e)
         # 2. 过滤models搜索结果条目、models首页trending元素
         elif "huggingface.co/models-json" in request.url:
             try:
@@ -154,7 +176,7 @@ def response_interceptor(request, response):
                 pass
         
         # 8. 论坛页面过滤：首页帖子、帖子中的posts
-        elif "discuss.huggingface.co/latest.json" in request.url or "discuss.huggingface.co/hot.json" in request.url or "discuss.huggingface.co/top.json" in request.url or "discuss.huggingface.co/categories_and_latest" in request.url:
+        elif "discuss.huggingface.co/latest.json" in request.url or "discuss.huggingface.co/hot.json" in request.url or "discuss.huggingface.co/top.json" in request.url or "discuss.huggingface.co/categories_and_latest" in request.url or "discuss.huggingface.co/c/" in request.url:
             try:
                 start_time = time.time()
                 print(request.url)
@@ -188,7 +210,7 @@ def response_interceptor(request, response):
                 print("Error:", e)
                 pass
         # 9. 过滤models\datasets card页面,含有违禁词则无法正常访问页面
-        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"]:
+        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"] and re.search(re.compile(r'https://huggingface\.co/[^/]+/[^/]+',re.IGNORECASE),request.url) and "/models" not in request.url and "/datasets" not in request.url:
             try:
                 start_time = time.time()
                 print(request.url)
@@ -198,6 +220,29 @@ def response_interceptor(request, response):
             except Exception as e:
                 print("Error:", e)
                 pass
+        # 10. 过滤organizations页面的models、datasets、...条目
+        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"] and (re.search(re.compile(r'https://huggingface\.co/[^/]+',re.IGNORECASE),request.url) or (re.search(re.compile(r'https://huggingface\.co/[^/]+/[^/]+',re.IGNORECASE),request.url) and ("/models" in request.url or "/datasets" in request.url))):
+            try:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_organizations_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                duration = time.time() - start_time
+                print(f"过滤organization页面耗时: {duration:.4f}秒")
+            except Exception as e:
+                print("Error:", e)
+                pass
+
+        # 11. 过滤huggingface.co首页
+        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"]:
+            try:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_index_page_filter(response.body.decode('utf-8', errors='ignore'), filter_words)
+                duration = time.time() - start_time
+                print(f"过滤huggingface.co首页耗时: {duration:.4f}秒")
+            except Exception as e:
+                print("Error:", e)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Load Hugging Face with optional proxy.")
