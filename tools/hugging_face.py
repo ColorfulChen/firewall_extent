@@ -99,7 +99,33 @@ DISCUSS_POSTS_TARGET_CONTAINERS=[
         'preserve_rules':[]
     }
 ]
-
+INDEX_PAGE_TARGET_CONTAINERS=[
+    {
+        'container':'div.relative.grid.grid-cols-1.gap-6.lg\\:grid-cols-3',
+        'remove_rules':['div.relative.col-span-1.flex.flex-col.items-stretch.text-center > div > article'],
+        'preserve_rules':[]
+    }
+]
+ORGANIZATIONS_PAGE_TARGET_CONTAINERS=[
+    {#index : models/datasets
+        'container':'div.container.relative.flex.flex-col.md\\:grid.md\\:space-y-0.w-full.md\\:grid-cols-10.space-y-4.md\\:gap-6',
+        'remove_rules':['section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#models > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article',
+                        'section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#datasets > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article'], ##models > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article:nth-child(1)
+        'preserve_rules':[]
+    },
+    {#view all : models/datasets
+        'container':'body > div > main > div > div',
+        'remove_rules':['section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div > div > article'],
+        'preserve_rules':[]
+    }
+]
+FULLTEXT_SEARCH_TARGET_CONTAINERS=[
+    {
+        'container':'body > div > main > div > div',
+        'remove_rules':['div.overflow-hidden.py-2.lg\\:flex-1.lg\\:px-8.lg\\:py-8.lg\\:pb-14 > div.mt-4.flex.flex-col.gap-5 > div'],
+        'preserve_rules':[]
+    }
+]
 
 #1.过滤huggingface搜索框推荐条目的函数
 def hugging_face_quick_search_filter(response,filter_words):
@@ -169,6 +195,95 @@ def hugging_face_quick_search_filter(response,filter_words):
     new_json = json.dumps(data, ensure_ascii=False).encode("utf-8") #json转换为字符串
     new_body = new_json
     return new_body
+
+def hugging_face_fulltext_search_json_filter(response,filter_words):
+    """
+    过滤huggingface full-text搜索框json结果条目的函数
+    :param response: 响应对象
+    :param filter_words: 需要过滤的词列表
+    """
+    decompressed = response
+    data = json.loads(decompressed) #字符串转换为json
+    try:
+        filtered_models = []
+        for item in data['hits']:
+            if (not any(re.search(re.compile(word,re.IGNORECASE), item['name']) for word in filter_words)) and (not any(re.search(re.compile(word,re.IGNORECASE), item['tags']) for word in filter_words)):
+                filtered_models.append(item)
+            else:
+                print(f"[full-text-json]Filtered out: (name){item['name']} (tags){item['tags']}")
+        data['hits'] = filtered_models
+    except KeyError as e:
+        pass
+
+def hugging_face_fulltext_search_page_filter(response, filter_words):
+    soup = BeautifulSoup(response, 'html.parser')   #将字符串形式的html转换为BeautifulSoup对象
+    total_removed = 0
+
+    # 创建关键词正则表达式
+    pattern = re.compile('|'.join(filter_words), re.IGNORECASE)
+
+    # 处理每个目标容器
+    for container_config in FULLTEXT_SEARCH_TARGET_CONTAINERS:
+        container_selector = container_config['container']
+        containers = soup.select(container_selector)
+
+        if not containers:
+            print(f"未找到容器: {container_selector}")
+            continue
+
+        # print(f"\n处理容器: {container_selector}")
+        container_removed = 0
+
+        for container in containers:
+            # 先标记要保留的元素
+            preserved_elements = []
+            for preserve_rule in container_config['preserve_rules']:
+                preserved_elements.extend(container.select(preserve_rule))
+
+            # 处理每个删除规则
+            for remove_rule in container_config['remove_rules']:
+                for element in container.select(remove_rule):
+                    # 检查是否在保留列表中
+                    if element in preserved_elements:
+                        continue
+
+                    # 检查是否包含关键词
+                    if element.find(string=pattern):
+                        # 获取元素信息
+                        element_info = {
+                            'tag': element.name,
+                            'classes': element.get('class', []),
+                            'id': element.get('id'),
+                            'rule': remove_rule,
+                            'container': container_selector
+                        }
+
+                        # 打印删除信息
+                        print(f"删除元素 [规则: {remove_rule}]")
+                        print(f"标签: {element_info['tag']}")
+                        print(f"类: {element_info['classes']}")
+                        print(f"内容: {str(element)}")
+                        print("-" * 40)
+
+                        # 删除元素
+                        '''
+                        element.attrs['hidden']=True
+                        if 'style' in element.attrs:
+                            # 已有样式：追加新样式
+                            current_style = element['style'].rstrip('; ') + '; '
+                            new_style = current_style + 'display: none !important;'
+                        else:
+                            # 无样式：创建新样式
+                            new_style = 'display: none !important;'
+                        
+                        element['style'] = new_style
+                        '''
+                        element.decompose()
+                        container_removed += 1
+                        total_removed += 1
+    #soup.select("main")[0].decompose()
+    modified_html = str(soup)
+    return modified_html.encode('utf-8')
 
 #2. models过滤
     #model-json过滤
@@ -931,6 +1046,124 @@ def hugging_face_discuss_posts_page_filter(response, filter_words):
         for container in containers:
             # 先标记要保留的元素
             preserved_elements = []
+            for preserve_rule in container_config['preserve_rules']:
+                preserved_elements.extend(container.select(preserve_rule))
+
+            # 处理每个删除规则
+            for remove_rule in container_config['remove_rules']:
+                for element in container.select(remove_rule):
+                    # 检查是否在保留列表中
+                    if element in preserved_elements:
+                        continue
+
+                    # 检查是否包含关键词
+                    if element.find(string=pattern):
+                        # 获取元素信息
+                        element_info = {
+                            'tag': element.name,
+                            'classes': element.get('class', []),
+                            'id': element.get('id'),
+                            'rule': remove_rule,
+                            'container': container_selector
+                        }
+
+                        # 打印删除信息
+                        print(f"删除元素 [规则: {remove_rule}]")
+                        print(f"标签: {element_info['tag']}")
+                        print(f"类: {element_info['classes']}")
+                        print(f"内容: {str(element)}")
+                        print("-" * 40)
+
+                        # 删除元素
+                        element.decompose()
+                        container_removed += 1
+                        total_removed += 1
+
+    modified_html = str(soup)
+    return modified_html.encode('utf-8')
+
+#过滤huggingface.co首页
+def hugging_face_index_page_filter(response, filter_words):
+    soup = BeautifulSoup(response, 'html.parser')   #将字符串形式的html转换为BeautifulSoup对象
+    total_removed = 0
+
+    # 创建关键词正则表达式
+    pattern = re.compile('|'.join(filter_words), re.IGNORECASE)
+
+    # 处理每个目标容器
+    for container_config in INDEX_PAGE_TARGET_CONTAINERS:
+        container_selector = container_config['container']
+        containers = soup.select(container_selector)
+
+        if not containers:
+            print(f"未找到容器: {container_selector}")
+            continue
+
+        # print(f"\n处理容器: {container_selector}")
+        container_removed = 0
+
+        for container in containers:
+            # 先标记要保留的元素
+            preserved_elements = []
+            for preserve_rule in container_config['preserve_rules']:
+                preserved_elements.extend(container.select(preserve_rule))
+
+            # 处理每个删除规则
+            for remove_rule in container_config['remove_rules']:
+                for element in container.select(remove_rule):
+                    # 检查是否在保留列表中
+                    if element in preserved_elements:
+                        continue
+
+                    # 检查是否包含关键词
+                    if element.find(string=pattern):
+                        # 获取元素信息
+                        element_info = {
+                            'tag': element.name,
+                            'classes': element.get('class', []),
+                            'id': element.get('id'),
+                            'rule': remove_rule,
+                            'container': container_selector
+                        }
+
+                        # 打印删除信息
+                        print(f"删除元素 [规则: {remove_rule}]")
+                        print(f"标签: {element_info['tag']}")
+                        print(f"类: {element_info['classes']}")
+                        print(f"内容: {str(element)}")
+                        print("-" * 40)
+
+                        # 删除元素
+                        element.decompose()
+                        container_removed += 1
+                        total_removed += 1
+
+    modified_html = str(soup)
+    return modified_html.encode('utf-8')
+
+#过滤组织页面中的models、datasets、...
+def hugging_face_organizations_page_filter(response, filter_words):
+    soup = BeautifulSoup(response, 'html.parser')   #将字符串形式的html转换为BeautifulSoup对象
+    total_removed = 0
+
+    # 创建关键词正则表达式
+    pattern = re.compile('|'.join(filter_words), re.IGNORECASE)
+
+    # 处理每个目标容器
+    for container_config in ORGANIZATIONS_PAGE_TARGET_CONTAINERS:
+        container_selector = container_config['container']
+        containers = soup.select(container_selector)
+
+        if not containers:
+            print(f"未找到容器: {container_selector}")
+            continue
+
+        # print(f"\n处理容器: {container_selector}")
+        container_removed = 0
+
+        for container in containers:
+            # 先标记要保留的元素
+            preserved_elements =[]
             for preserve_rule in container_config['preserve_rules']:
                 preserved_elements.extend(container.select(preserve_rule))
 
