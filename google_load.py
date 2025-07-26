@@ -56,7 +56,7 @@ def response_interceptor(request, response):
     Intercepts responses from Google to filter out unwanted content.
     """
     url = request.url
-     = response.headers.get('Content-Type', '')
+    content_type = response.headers.get('Content-Type', '')
     try:
         # google scholar
         if 'scholar.google.com' in url: 
