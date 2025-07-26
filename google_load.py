@@ -22,10 +22,34 @@ from tools.wiki_filter import (
     inject_content, 
     wiki_content_filter
 )
+from tools.hugging_face import (
+    hugging_face_quick_search_filter,
+    hugging_face_card_page_filter,
+    hugging_face_models_search_json_filter,
+    hugging_face_models_search_page_filter,
+    hugging_face_datasets_search_json_filter,
+    hugging_face_datasets_search_page_filter,
+    hugging_face_spaces_search_json_filter,
+    hugging_face_spaces_search_page_filter,
+    hugging_face_collections_search_json_filter,
+    hugging_face_collections_search_page_filter,
+    hugging_face_blogs_search_page_filter,
+    hugging_face_blogs_community_page_filter,
+    hugging_face_posts_search_page_filter,
+    hugging_face_posts_search_json_filter,
+    hugging_face_discuss_topics_search_json_filter,
+    hugging_face_discuss_topics_search_page_filter,
+    hugging_face_discuss_posts_json_filter,
+    hugging_face_discuss_posts_page_filter,
+    hugging_face_index_page_filter,
+    hugging_face_organizations_page_filter,
+    hugging_face_fulltext_search_page_filter,
+    hugging_face_fulltext_search_json_filter
+)
 from tools.mongodb import cleanup_old_collections
 from tools.web import setup_driver
 
-FILTER_WORDS: List[str] = ["airlines", "news", "Airlines", "airline", "习近平", "六四"]
+FILTER_WORDS: List[str] = ["airlines","news","Airlines","airline","习近平","六四","防火墙技术","chatgpt","gpt","kimi",'GPT','Kimi']
 
 def response_interceptor(request, response):
     """
@@ -140,6 +164,138 @@ def response_interceptor(request, response):
                 else:
                     response.body = wiki_content_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
                                                         request.url)
+        elif 'huggingface.co' in request.url: 
+            # 1. 过滤顶部快速搜索推荐条目
+            if "huggingface.co/api/quicksearch" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_quick_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤quick搜索建议耗时: {duration:.4f}秒")
+
+            # 2. 过滤models搜索结果条目、models首页trending元素
+            elif "huggingface.co/models-json" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_models_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤models-json耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/models" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_models_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤models-page耗时: {duration:.4f}秒")
+
+            # 3. 过滤datasets搜索结果条目
+            elif "huggingface.co/datasets-json" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_datasets_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤datasets-json耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/datasets" in request.url and "datasets/" not in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_datasets_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤datasets-page耗时: {duration:.4f}秒")
+
+            # 4. 过滤spaces搜索结果条目
+            elif "huggingface.co/spaces-json" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_spaces_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤spaces-json耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/spaces" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_spaces_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤spaces-page耗时: {duration:.4f}秒")
+
+            # 5. 过滤collentions搜索结果条目、collentions首页trending元素
+            elif "huggingface.co/collections-json" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_collections_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤collections-json耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/collections" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_collections_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤collections-page耗时: {duration:.4f}秒")
+        
+            # 6. blogs过滤:展开侧边栏community页面和blogs首页
+            elif "huggingface.co/blog/community" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_blogs_community_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤blog/community页面耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/blog" in request.url and "png" not in request.url and "jpg" not in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_blogs_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤blog页面耗时: {duration:.4f}秒")
+            
+            # 7. posts过滤
+            elif "huggingface.co/api/posts" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_posts_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤posts-json耗时: {duration:.4f}秒")
+
+            elif "huggingface.co/posts" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_posts_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤posts页面耗时: {duration:.4f}秒")
+            
+            # 8. 论坛页面过滤：首页帖子、帖子中的posts
+            elif "discuss.huggingface.co/latest.json" in request.url or "discuss.huggingface.co/hot.json" in request.url or "discuss.huggingface.co/top.json" in request.url or "discuss.huggingface.co/categories_and_latest" in request.url:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_discuss_topics_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤discuss-topic-json耗时: {duration:.4f}秒")
+
+            elif "discuss.huggingface.co/t/" in request.url:
+                start_time = time.time()
+                print(request.url)
+                if "json" in request.url:
+                    response.body = hugging_face_discuss_posts_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                else:
+                    response.body = hugging_face_discuss_posts_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤discuss-posts页面耗时: {duration:.4f}秒")
+
+            elif "https://discuss.huggingface.co" in request.url and "text/html" in response.headers["Content-Type"]:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_discuss_topics_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤discuss首页耗时: {duration:.4f}秒")
+
+            # 9. 过滤models\datasets card页面,含有违禁词则无法正常访问页面
+            elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"]:
+                start_time = time.time()
+                print(request.url)
+                response.body = hugging_face_card_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤model\dataset card页面耗时: {duration:.4f}秒")
+
     except Exception as e:
         print(f"Error in response_interceptor for URL {url}: {e}")
 
