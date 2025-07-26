@@ -62,25 +62,17 @@ def response_interceptor(request, response):
         if 'scholar.google.com' in url: 
             # 1. 过滤搜索建议
             if "scholar.google.com/scholar_complete" in url:
-                try:
-                    start_time = time.time()
-                    response.body = google_scholar_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
-                    duration = time.time() - start_time
-                    print(f"过滤搜索建议耗时: {duration:.4f}秒")
-                except Exception as e:
-                    print("Error:", e)
-                    pass  # 失败时不做处理
+                start_time = time.time()
+                response.body = google_scholar_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤搜索建议耗时: {duration:.4f}秒")
             # 2. 过滤搜索结果`
             elif "scholar.google.com/scholar" in url and "text/html" in content_type:
                 #过滤主页面
-                try:
-                    start_time = time.time()
-                    response.body = google_scholar_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
-                    duration = time.time() - start_time
-                    print(f"过滤主页面耗时: {duration:.4f}秒")
-                except Exception as e:
-                    print("Error:", e)
-                    pass
+                start_time = time.time()
+                response.body = google_scholar_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤主页面耗时: {duration:.4f}秒")
         # google search
         elif 'google.com' in url:
             if "google.com/search?vet=12" in url:
@@ -114,37 +106,28 @@ def response_interceptor(request, response):
         elif "/zh.wikipedia.org" in url:
             #wiki百科首页搜索栏
             if "/search/title?q" in url:
-                try:
-                    start_time = time.time()
-                    response.body = wiki_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
-                                                       url)
-                    duration = time.time() - start_time
-                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
-                except Exception as e:
-                    print("Error:", e)
-                    pass  # 失败时不做处理
+                start_time = time.time()
+                response.body = wiki_search_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
+                                                    url)
+                duration = time.time() - start_time
+                print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+
             #wiki百科搜索页搜索栏
             if "w/api.php?action=" in url:
-                try:
-                    start_time = time.time()
-                    response.body = wiki_suggestions_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
-                                                            url)
-                    duration = time.time() - start_time
-                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
-                except Exception as e:
-                    print("Error:", e)
-                    pass  # 失败时不做处理
+                start_time = time.time()
+                response.body = wiki_suggestions_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
+                                                        url)
+                duration = time.time() - start_time
+                print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+
             #wiki百科页面
             if "w/index.php?" in url:
-                try:
-                    start_time = time.time()
-                    response.body = wiki_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
-                                                            url)
-                    duration = time.time() - start_time
-                    print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
-                except Exception as e:
-                    print("Error:", e)
-                    pass  # 失败时不做处理
+                start_time = time.time()
+                response.body = wiki_search_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS,
+                                                        url)
+                duration = time.time() - start_time
+                print(f"过滤wiki百科搜索耗时: {duration:.4f}秒")
+
             #wiki百科标题
             if "/wiki/" in url and 'text/html' in content_type:
 
@@ -329,9 +312,9 @@ def response_interceptor(request, response):
                 duration = time.time() - start_time
                 print(f"过滤huggingface.co首页耗时: {duration:.4f}秒")
 
-
     except Exception as e:
         print(f"Error in response_interceptor for URL {url}: {e}")
+        pass
 
 def save_responses(driver, output_dir="responses"):
     """
