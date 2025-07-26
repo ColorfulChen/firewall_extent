@@ -221,11 +221,11 @@ def response_interceptor(request, response):
 
             # 4. 过滤spaces搜索结果条目
             elif "huggingface.co/spaces-json" in url:
-                    start_time = time.time()
-                    print(url)
-                    response.body = hugging_face_spaces_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
-                    duration = time.time() - start_time
-                    print(f"过滤spaces-json耗时: {duration:.4f}秒")
+                start_time = time.time()
+                print(url)
+                response.body = hugging_face_spaces_search_json_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
+                duration = time.time() - start_time
+                print(f"过滤spaces-json耗时: {duration:.4f}秒")
 
             elif "huggingface.co/spaces" in url:
                 start_time = time.time()
