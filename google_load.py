@@ -56,7 +56,7 @@ def response_interceptor(request, response):
     Intercepts responses from Google to filter out unwanted content.
     """
     url = request.url
-    content_type = response.headers.get('Content-Type', '')
+     = response.headers.get('Content-Type', '')
     try:
         # google scholar
         if 'scholar.google.com' in url: 
@@ -112,7 +112,6 @@ def response_interceptor(request, response):
                     print(f"过滤主页面耗时: {time.time() - start_time:.4f}秒")
         #wikipedia
         elif "/zh.wikipedia.org" in url:
-            content_type
             #wiki百科首页搜索栏
             if "/search/title?q" in url:
                 try:
