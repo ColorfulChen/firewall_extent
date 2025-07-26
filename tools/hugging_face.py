@@ -52,10 +52,11 @@ COLLECTIONS_TRENDING_TARGET_CONTAINERS=[
 ]
 BLOGS_TARGET_CONTAINERS=[
     {#过滤blog首页
-        'container':'div.col-span-1.lg\\:col-span-7.lg\\:pr-12',
-        'remove_rules':['div.pb-6.pt-12 > div',
-                        'div.grid.grid-cols-1.gap-12.pt-8.lg\\:grid-cols-2 > div',
-                        'div.bg-linear-to-br.from-yellow-100\\/40.dark\\:border-yellow-500\\/5.dark\\:from-yellow-500\\/10.mb-2.mt-8.space-y-4.rounded-3xl.border.border-yellow-100.to-10\\%.p-4.lg\\:hidden > div.SVELTE_HYDRATER.contents > div > div.scrollbar-hidden.flex.w-full.snap-x.justify-start.gap-x-2.overflow-auto > div'],
+        'container':'body > div > main > div',
+        'remove_rules':['div.col-span-1.lg\\:col-span-7.lg\\:pr-12 > div.pb-6.pt-12 > div',
+                        'div.col-span-1.lg\\:col-span-7.lg\\:pr-12 > div.grid.grid-cols-1.gap-12.pt-8.lg\\:grid-cols-2 > div',
+                        'div.col-span-1.lg\\:col-span-7.lg\\:pr-12 > div.bg-linear-to-br.from-yellow-100\\/40.dark\\:border-yellow-500\\/5.dark\\:from-yellow-500\\/10.mb-2.mt-8.space-y-4.rounded-3xl.border.border-yellow-100.to-10\\%.p-4.lg\\:hidden > div.SVELTE_HYDRATER.contents > div > div.scrollbar-hidden.flex.w-full.snap-x.justify-start.gap-x-2.overflow-auto > div',
+                        'div.hidden.lg\\:col-span-3.lg\\:block > div > div > div.mt-4.flex.flex-col.gap-y-6 > article'],
         'preserve_rules':[]
     },
     {#过滤具体的blog内容页面
@@ -89,8 +90,8 @@ DISCUSS_TOPICS_TARGET_CONTAINERS=[
 ]
 DISCUSS_POSTS_TARGET_CONTAINERS=[
     {#过滤posts
-        'container':'div#main-outlet > div.topic-body.crawler-post',
-        'remove_rules':['div.post-stream.widget-post-stream > div'],
+        'container':'div#main-outlet',
+        'remove_rules':['div > div.topic-body.crawler-post'],
         'preserve_rules':[]
     },
     {#过滤底部related topics
@@ -110,12 +111,14 @@ ORGANIZATIONS_PAGE_TARGET_CONTAINERS=[
     {#index : models/datasets
         'container':'div.container.relative.flex.flex-col.md\\:grid.md\\:space-y-0.w-full.md\\:grid-cols-10.space-y-4.md\\:gap-6',
         'remove_rules':['section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#models > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article',
-                        'section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#datasets > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article'], ##models > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article:nth-child(1)
+                        'section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#datasets > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article',
+                        'section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div#spaces > div > div > article'], ##models > div > div.grid.grid-cols-1.gap-5.xl\:grid-cols-2 > article:nth-child(1)
         'preserve_rules':[]
     },
-    {#view all : models/datasets
+    {#view all : models/datasets/spaces/collections
         'container':'body > div > main > div > div',
-        'remove_rules':['section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div > div > article'],
+        'remove_rules':['section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div > div > article',
+                        'section.pt-8.border-gray-100.md\\:col-span-6.lg\\:col-span-7.max-md\\:pt-0\\! > div > div > div > div.\\@xl\\:hidden.flex.flex-col.gap-6 > article'],
         'preserve_rules':[]
     }
 ]
@@ -208,12 +211,17 @@ def hugging_face_fulltext_search_json_filter(response,filter_words):
         filtered_models = []
         for item in data['hits']:
             if (not any(re.search(re.compile(word,re.IGNORECASE), item['name']) for word in filter_words)) and (not any(re.search(re.compile(word,re.IGNORECASE), item['tags']) for word in filter_words)):
+                #print(f"[full-text-json]not Filtered out: (name){item['name']} (tags){item['tags']}")
                 filtered_models.append(item)
             else:
                 print(f"[full-text-json]Filtered out: (name){item['name']} (tags){item['tags']}")
         data['hits'] = filtered_models
     except KeyError as e:
-        pass
+        print("keyerror:",e)
+    
+    new_json = json.dumps(data, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    new_body = new_json
+    return new_body
 
 def hugging_face_fulltext_search_page_filter(response, filter_words):
     soup = BeautifulSoup(response, 'html.parser')   #将字符串形式的html转换为BeautifulSoup对象
@@ -266,24 +274,30 @@ def hugging_face_fulltext_search_page_filter(response, filter_words):
                         print("-" * 40)
 
                         # 删除元素
-                        '''
-                        element.attrs['hidden']=True
-                        if 'style' in element.attrs:
-                            # 已有样式：追加新样式
-                            current_style = element['style'].rstrip('; ') + '; '
-                            new_style = current_style + 'display: none !important;'
-                        else:
-                            # 无样式：创建新样式
-                            new_style = 'display: none !important;'
-                        
-                        element['style'] = new_style
-                        '''
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
-    #soup.select("main")[0].decompose()
+
+    init_info_fulltext=json.loads(soup.select("main > div")[0].attrs['data-props'])
+    final_init_info_fulltext=json.dumps(hugging_face_fulltext_init_page_filter(init_info_fulltext,filter_words))
+    soup.select("main > div")[0].attrs['data-props']=final_init_info_fulltext
+
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_fulltext_init_page_filter(init_info,filter_words):
+    try:
+        filtered_fulltext = []
+        for item in init_info['docs']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), json.dumps(item)) for word in filter_words):
+                filtered_fulltext.append(item)
+            else:
+                print(f"[fulltext-search-init-page]Filtered out: {item}")
+        init_info['docs'] = filtered_fulltext
+    except KeyError as e:
+        print("keyerror:",e)
+    
+    return init_info
 
 #2. models过滤
     #model-json过滤
@@ -370,9 +384,30 @@ def hugging_face_models_search_page_filter(response, filter_words):
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
-
+                        #container.decompose()
+                        #break
+    #过滤首页models初始数据
+    init_info_model=json.loads(soup.select("main > div")[0].attrs['data-props'])
+    #print(init_info_model)
+    final_init_info_model=json.dumps(hugging_face_models_init_page_filter(init_info_model,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    soup.select("main > div")[0].attrs['data-props']=final_init_info_model
+    
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_models_init_page_filter(init_info,filter_words):
+    try:
+        filtered_models = []
+        for item in init_info['initialValues']['models']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['id']) for word in filter_words):
+                filtered_models.append(item)
+            else:
+                print(f"[models-init-page]Filtered out: {item['id']}")
+        init_info['initialValues']['models'] = filtered_models
+    except KeyError as e:
+        pass
+    
+    return init_info
 
     #models\datasets card过滤
 def hugging_face_card_page_filter(response, filter_words):
@@ -522,9 +557,28 @@ def hugging_face_datasets_search_page_filter(response, filter_words):
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
+    #过滤首页datasets初始数据
+    init_info_dataset=json.loads(soup.select("main > div")[0].attrs['data-props'])
+    #print(init_info_dataset)
+    final_init_info_dataset=json.dumps(hugging_face_datasets_init_page_filter(init_info_dataset,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    soup.select("main > div")[0].attrs['data-props']=final_init_info_dataset
 
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_datasets_init_page_filter(init_info,filter_words):
+    try:
+        filtered_datasets = []
+        for item in init_info['initialValues']['datasets']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['id']) for word in filter_words):
+                filtered_datasets.append(item)
+            else:
+                print(f"[datasets-init-page]Filtered out: {item['id']}")
+        init_info['initialValues']['datasets'] = filtered_datasets
+    except KeyError as e:
+        pass
+    
+    return init_info
 
 #4. spaces过滤
     #spaces-json过滤
@@ -610,9 +664,28 @@ def hugging_face_spaces_search_page_filter(response, filter_words):
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
+    #过滤首页spaces初始数据
+    init_info_space=json.loads(soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props'])
+    #print(init_info_space)
+    final_init_info_space=json.dumps(hugging_face_spaces_init_page_filter(init_info_space,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props']=final_init_info_space
 
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_spaces_init_page_filter(init_info,filter_words):
+    try:
+        filtered_spaces = []
+        for item in init_info['initialValues']['spaces']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['title']) for word in filter_words):
+                filtered_spaces.append(item)
+            else:
+                print(f"[spaces-init-page]Filtered out: {item['title']}")
+        init_info['initialValues']['spaces'] = filtered_spaces
+    except KeyError as e:
+        pass
+    
+    return init_info
 
 # 5. collections过滤
     #collections-json过滤
@@ -699,9 +772,29 @@ def hugging_face_collections_search_page_filter(response, filter_words):
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
+    #过滤首页collections初始数据
+    init_info_collection=json.loads(soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props'])
+    #print(init_info_collection)
+    final_init_info_collection=json.dumps(hugging_face_collections_init_page_filter(init_info_collection,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props']=final_init_info_collection
 
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_collections_init_page_filter(init_info,filter_words):
+    try:
+        for index,data in enumerate(init_info['collections'],start=0):
+            filtered_collections = []
+            for item in data['items']:
+                if not any(re.search(re.compile(word,re.IGNORECASE), item['id']) for word in filter_words):
+                    filtered_collections.append(item)
+                else:
+                    print(f"[collections-init-page]Filtered out: {item['id']}")
+            init_info['collections'][index]['items'] = filtered_collections
+    except Exception as e:
+        print("Error:",e)
+    
+    return init_info
 
 # 6. blogs过滤
     #blogs展开侧边栏community页面过滤
@@ -760,8 +853,28 @@ def hugging_face_blogs_community_page_filter(response, filter_words):
                         container_removed += 1
                         total_removed += 1
 
+    #过滤侧边栏blogs community展开页面初始数据
+    init_info_blog_community=json.loads(soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props'])
+    #print(init_info_blog_community)
+    final_init_info_blog_community=json.dumps(hugging_face_blogs_community_init_page_filter(init_info_blog_community,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+    soup.select("main > div.SVELTE_HYDRATER.contents")[0].attrs['data-props']=final_init_info_blog_community
+
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_blogs_community_init_page_filter(init_info,filter_words):
+    try:
+        filtered_blogs_community = []
+        for item in init_info['posts']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['title']) for word in filter_words):
+                filtered_blogs_community.append(item)
+            else:
+                print(f"[blogs-community-init-page]Filtered out: {item['title']}")
+        init_info['posts'] = filtered_blogs_community
+    except KeyError as e:
+        pass
+    
+    return init_info
 
     #blogs-首页元素过滤
 def hugging_face_blogs_search_page_filter(response, filter_words):
@@ -830,8 +943,36 @@ def hugging_face_blogs_search_page_filter(response, filter_words):
     if soup_sign==1:
         modified_html = str(error_soup)
         return modified_html.encode('utf-8')
+    try:
+        #过滤首页blogs初始数据
+        init_info_blog=json.loads(soup.select("div.bg-linear-to-br.from-yellow-100\\/40.dark\\:border-yellow-500\\/5.dark\\:from-yellow-500\\/10.mb-2.mt-8.space-y-4.rounded-3xl.border.border-yellow-100.to-10\\%.p-4.lg\\:hidden > div.SVELTE_HYDRATER.contents")[0].attrs['data-props'])
+        #print(init_info_blog)
+        final_init_info_blog=json.dumps(hugging_face_blogs_init_page_filter(init_info_blog,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+        soup.select("div.bg-linear-to-br.from-yellow-100\\/40.dark\\:border-yellow-500\\/5.dark\\:from-yellow-500\\/10.mb-2.mt-8.space-y-4.rounded-3xl.border.border-yellow-100.to-10\\%.p-4.lg\\:hidden > div.SVELTE_HYDRATER.contents")[0].attrs['data-props']=final_init_info_blog
+        #过滤首页blogs-2初始数据
+        init_info_blog=json.loads(soup.select("div.hidden.lg\\:col-span-3.lg\\:block > div.SVELTE_HYDRATER.contents")[0].attrs['data-props'])
+        #print(init_info_blog)
+        final_init_info_blog=json.dumps(hugging_face_blogs_init_page_filter(init_info_blog,filter_words))#, ensure_ascii=False).encode("utf-8") #json转换为字符串
+        soup.select("div.hidden.lg\\:col-span-3.lg\\:block > div.SVELTE_HYDRATER.contents")[0].attrs['data-props']=final_init_info_blog
+    except Exception as e:
+        print("Error:",e)
+    
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_blogs_init_page_filter(init_info,filter_words):
+    try:
+        filtered_blogs = []
+        for item in init_info['posts']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['title']) for word in filter_words):
+                filtered_blogs.append(item)
+            else:
+                print(f"[blogs-init-page]Filtered out: {item['title']}")
+        init_info['posts'] = filtered_blogs
+    except KeyError as e:
+        pass
+    
+    return init_info
 
 # 7. posts过滤
     #过滤post-json
@@ -913,8 +1054,28 @@ def hugging_face_posts_search_page_filter(response, filter_words):
                         container_removed += 1
                         total_removed += 1
 
+    #过滤首页posts初始数据
+    init_info_post=json.loads(soup.select("main > div")[0].attrs['data-props'])
+    #print(init_info_post)
+    final_init_info_post=json.dumps(hugging_face_posts_init_page_filter(init_info_post,filter_words))
+    soup.select("main > div")[0].attrs['data-props']=final_init_info_post
+
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_posts_init_page_filter(init_info,filter_words):
+    try:
+        filtered_posts = []
+        for item in init_info['socialPosts']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['rawContent']) for word in filter_words):
+                filtered_posts.append(item)
+            else:
+                print(f"[posts-init-page]Filtered out: {item['rawContent']}")
+        init_info['socialPosts'] = filtered_posts
+    except KeyError as e:
+        pass
+    
+    return init_info
 
 #论坛页面过滤
     #过滤首页帖子
@@ -1196,6 +1357,64 @@ def hugging_face_organizations_page_filter(response, filter_words):
                         element.decompose()
                         container_removed += 1
                         total_removed += 1
+    
+    init_info_organization=json.loads(soup.select("main > div")[0].attrs['data-props'])
+    final_init_info_organization=json.dumps(hugging_face_organizations_init_page_filter(init_info_organization,filter_words))
+    soup.select("main > div")[0].attrs['data-props']=final_init_info_organization
 
     modified_html = str(soup)
     return modified_html.encode('utf-8')
+
+def hugging_face_organizations_init_page_filter(init_info,filter_words):
+    try:
+        filtered_models = []
+        for item in init_info['models']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['id']) for word in filter_words):
+                filtered_models.append(item)
+            else:
+                print(f"[org-init-page-models]Filtered out: {item['id']}")
+        init_info['models'] = filtered_models
+    except KeyError as e:
+        print("keyerror:",e)
+    try:
+        filtered_datasets = []
+        for item in init_info['datasets']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), json.dumps(item)) for word in filter_words):
+                filtered_datasets.append(item)
+            else:
+                print(f"[org-init-page-datasets]Filtered out: {item}")
+        init_info['datasets'] = filtered_datasets
+    except KeyError as e:
+        print("keyerror:",e)
+    try:
+        filtered_collections = []
+        for item in init_info['collections']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), json.dumps(item)) for word in filter_words):
+                filtered_collections.append(item)
+            else:
+                print(f"[org-init-page-collections]Filtered out: {item}")
+        init_info['collections'] = filtered_collections
+    except KeyError as e:
+        print("keyerror:",e)
+    try:
+        filtered_spaces = []
+        for item in init_info['spaces']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), json.dumps(item)) for word in filter_words):
+                filtered_spaces.append(item)
+            else:
+                print(f"[org-init-page-spaces]Filtered out: {item}")
+        init_info['spaces'] = filtered_spaces
+    except KeyError as e:
+        print("keyerror:",e)
+    try:
+        filtered_repos = []
+        for item in init_info['repos']:
+            if not any(re.search(re.compile(word,re.IGNORECASE), item['id']) for word in filter_words):
+                filtered_repos.append(item)
+            else:
+                print(f"[org-init-page-repos]Filtered out: {item['id']}")
+        init_info['repos'] = filtered_repos
+    except KeyError as e:
+        print("keyerror:",e)
+
+    return init_info

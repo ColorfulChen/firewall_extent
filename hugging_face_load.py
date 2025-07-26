@@ -8,7 +8,7 @@ from tools.web import setup_driver
 import time
 import argparse 
 
-filter_words = ["airlines","news","Airlines","airline","习近平","六四","防火墙技术","chatgpt","gpt","kimi",'GPT']
+filter_words = ["airlines","news","Airlines","airline","习近平","六四","防火墙技术","chatgpt","gpt","kimi"]
 
 def response_interceptor(request, response):
     # hugging face
@@ -221,7 +221,7 @@ def response_interceptor(request, response):
                 print("Error:", e)
                 pass
         # 10. 过滤organizations页面的models、datasets、...条目
-        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"] and (re.search(re.compile(r'https://huggingface\.co/[^/]+',re.IGNORECASE),request.url) or (re.search(re.compile(r'https://huggingface\.co/[^/]+/[^/]+',re.IGNORECASE),request.url) and ("/models" in request.url or "/datasets" in request.url))):
+        elif "https://huggingface.co/" in request.url and "text/html" in response.headers["Content-Type"] and (re.search(re.compile(r'https://huggingface\.co/[^/]+',re.IGNORECASE),request.url) or (re.search(re.compile(r'https://huggingface\.co/[^/]+/[^/]+',re.IGNORECASE),request.url) and ("/models" in request.url or "/datasets" in request.url or "/spaces" in request.url or "/collections" in request.url))):
             try:
                 start_time = time.time()
                 print(request.url)
