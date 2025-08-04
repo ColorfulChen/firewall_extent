@@ -25,34 +25,47 @@ def contains_filter_words(text, filter_words):
 
 
 
-def filter_suggestions(data,filter_words):
+def filter_suggestions(data, filter_words):
     """过滤搜索建议中的敏感内容"""
-    filtered_data = {"users": [], "topics": [], "query": data.get("query", "")}
+    # 创建数据副本（避免修改原始数据）
+    filtered_data = data.copy()
 
-    if "users" in data:
-        for user in data["users"]:
-            screen_name = user.get("screen_name", "").lower()
-            name = user.get("name", "").lower()
+    # 1. 过滤用户列表
+    if "users" in filtered_data:
+        filtered_users = []
+        for user in filtered_data["users"]:
+            # 检查用户字段是否包含违禁词
+            user_text = " ".join([
+                user.get("name", ""),
+                user.get("screen_name", ""),
+                user.get("location", "")
+            ]).lower()
 
-            # 检查是否包含过滤词
-            should_filter = any(
-                re.search(rf'\b{re.escape(word.lower())}\b', f"{screen_name} {name}")
-                for word in filter_words
-            )
+            # 如果未检测到违禁词则保留
+            if not any(banned_word.lower() in user_text for banned_word in filter_words):
+                filtered_users.append(user)
 
-            if not should_filter:
-                filtered_data["users"].append(user)
+        filtered_data["users"] = filtered_users
 
-    if "topics" in data:
-        for topic in data["topics"]:
-            topic_name = topic.get("topic", "").lower()
-            should_filter = any(
-                re.search(rf'\b{re.escape(word.lower())}\b', topic_name)
-                for word in filter_words
-            )
+    # 2. 过滤话题列表
+    if "topics" in filtered_data:
+        filtered_topics = []
+        for topic in filtered_data["topics"]:
+            # 检查话题字段是否包含违禁词
+            topic_text = topic.get("topic", "").lower()
 
-            if not should_filter:
-                filtered_data["topics"].append(topic)
+            # 如果未检测到违禁词则保留
+            if not any(banned_word.lower() in topic_text for banned_word in filter_words):
+                filtered_topics.append(topic)
+
+        filtered_data["topics"] = filtered_topics
+
+    # 3. 更新结果计数
+    filtered_data["num_results"] = (
+            len(filtered_data.get("users", [])) +
+            len(filtered_data.get("topics", [])) +
+            len(filtered_data.get("events", [])) +
+            len(filtered_data.get("lists", [])))
 
     return filtered_data
 
@@ -109,68 +122,142 @@ def filter_timeline_response(response_body,filter_words):
         return response_body.encode('utf-8')
 
 
-def filter_search_timeline_response(response_body,filter_words):
-    """通用时间线响应过滤（支持主页和搜索）"""
+def filter_search_timeline_response(response_body, filter_words):
     try:
         data = json.loads(response_body)
+        instructions = data.get("data", {}).get("search_by_raw_query", {}).get("search_timeline", {}).get("timeline",
+                                                                                                          {}).get(
+            "instructions", [])
 
-        # 处理主页时间线
-        if data.get("data", {}).get("home", {}).get("home_timeline_urt", {}).get("instructions"):
-            # ... 保持原有的主页时间线过滤逻辑不变 ...
-            return json.dumps(data).encode('utf-8')
+        # 初始化统计
+        total_entries = 0
+        filtered_count = 0
+        filtered_details = []
 
-        # 处理搜索时间线
-        elif data.get("data", {}).get("search_by_raw_query", {}).get("search_timeline", {}).get("timeline", {}).get(
-                "instructions"):
-            instructions = data["data"]["search_by_raw_query"]["search_timeline"]["timeline"]["instructions"]
+        for instruction in instructions:
+            if instruction.get("type") != "TimelineAddEntries":
+                continue
 
-            for instruction in instructions:
-                if instruction.get("type") == "TimelineAddEntries":
-                    filtered_entries = []
-                    for entry in instruction.get("entries", []):
-                        entry_id = entry.get("entryId", "")
+            original_count = len(instruction.get("entries", []))
+            filtered_entries = []
 
-                        # 1. 用户模块过滤
-                        if "usermodule" in entry_id:
-                            user_data = entry.get("content", {}).get("items", [{}])[0].get("item", {}).get(
-                                "itemContent", {}).get("user_results", {}).get("result", {})
-                            user_name = user_data.get("core", {}).get("screen_name", "")
-                            description = user_data.get("legacy", {}).get("description", "")
+            for entry in instruction.get("entries", []):
+                total_entries += 1
+                entry_id = entry.get("entryId", "")
+                filtered = False
+                filter_reason = ""
 
-                            if contains_filter_words(user_name,filter_words) or contains_filter_words(description,filter_words):
-                                print_filtered_info("user", user_name, description)
-                                continue
+                # 1. 用户模块过滤
+                if "usermodule" in entry_id:
+                    for item in entry.get("content", {}).get("items", []):
+                        user_data = item.get("item", {}).get("itemContent", {}).get("user_results", {}).get("result",
+                                                                                                            {})
+                        core = user_data.get("core", {})
+                        legacy = user_data.get("legacy", {})
 
-                        # 2. 推文过滤
-                        elif entry_id.startswith("tweet-"):
-                            tweet = entry.get("content", {}).get("itemContent", {}).get("tweet_results", {}).get(
-                                "result", {})
-                            tweet_id = tweet.get("rest_id", "")
-                            tweet_text = tweet.get("legacy", {}).get("full_text", "")
-                            user_name = tweet.get("core", {}).get("user_results", {}).get("result", {}).get("legacy",
-                                                                                                            {}).get(
-                                "screen_name", "")
+                        screen_name = core.get("screen_name", "")
+                        description = legacy.get("description", "")
+                        name = legacy.get("name", "")
 
-                            if contains_filter_words(tweet_text) or contains_filter_words(user_name):
-                                print_filtered_info("tweet", tweet_id, user_name, tweet_text)
-                                continue
+                        if contains_forbidden_text(screen_name, filter_words):
+                            filter_reason = f"用户名 '{screen_name}' 含违禁词"
+                            filtered = True
+                        elif contains_forbidden_text(description, filter_words):
+                            filter_reason = f"用户描述含违禁词: '{truncate_text(description, 30)}'"
+                            filtered = True
+                        elif contains_forbidden_text(name, filter_words):
+                            filter_reason = f"用户显示名 '{name}' 含违禁词"
+                            filtered = True
 
-                        # 3. 社区模块过滤
-                        elif "community" in entry_id:
-                            # 可选：添加社区描述过滤
-                            pass
+                        if filtered:
+                            filtered_details.append(f" 用户过滤 | @{screen_name} | 原因: {filter_reason}")
+                            filtered_count += 1
+                            break
 
-                        filtered_entries.append(entry)
+                # 2. 推文过滤
+                elif entry_id.startswith("tweet-"):
+                    tweet = entry.get("content", {}).get("itemContent", {}).get("tweet_results", {}).get("result", {})
+                    legacy = tweet.get("legacy", {})
+                    core = tweet.get("core", {})
 
-                    instruction["entries"] = filtered_entries
+                    tweet_text = legacy.get("full_text", "")
+                    user_data = core.get("user_results", {}).get("result", {}).get("legacy", {})
+                    user_name = user_data.get("screen_name", "")
 
-            return json.dumps(data).encode('utf-8')
+                    # 检查文本内容
+                    if contains_forbidden_text(tweet_text, filter_words):
+                        filter_reason = f"推文内容含违禁词: '{truncate_text(tweet_text, 40)}'"
+                        filtered = True
+                    elif contains_forbidden_text(user_name, filter_words):
+                        filter_reason = f"作者 @{user_name} 含违禁词"
+                        filtered = True
+                    else:
+                        # 检查媒体描述
+                        for media in legacy.get("entities", {}).get("media", []):
+                            if contains_forbidden_text(media.get("description", ""), filter_words):
+                                filter_reason = f"媒体描述含违禁词: '{truncate_text(media.get('description', ''), 30)}'"
+                                filtered = True
+                                break
 
-        return response_body.encode('utf-8')
+                    if filtered:
+                        tweet_id = tweet.get("rest_id", "")
+                        filtered_details.append(f" 推文过滤 | ID:{tweet_id} | @{user_name} | 原因: {filter_reason}")
+                        filtered_count += 1
+
+                # 3. 社区模块过滤
+                elif "community" in entry_id:
+                    for item in entry.get("content", {}).get("items", []):
+                        comm_data = item.get("itemContent", {}).get("community_results", {}).get("result", {})
+                        comm_name = comm_data.get("name", "")
+                        comm_desc = comm_data.get("description", "")
+
+                        if contains_forbidden_text(comm_name, filter_words):
+                            filter_reason = f"社区名称 '{comm_name}' 含违禁词"
+                            filtered = True
+                        elif contains_forbidden_text(comm_desc, filter_words):
+                            filter_reason = f"社区描述含违禁词: '{truncate_text(comm_desc, 30)}'"
+                            filtered = True
+
+                        if filtered:
+                            filtered_details.append(f" 社区过滤 | {comm_name} | 原因: {filter_reason}")
+                            filtered_count += 1
+                            break
+
+                # 保留未过滤的条目
+                if not filtered:
+                    filtered_entries.append(entry)
+
+            # 更新指令中的条目
+            instruction["entries"] = filtered_entries
+            remaining_count = len(filtered_entries)
+            print(
+                f" 模块处理 | 类型: {entry_id.split('-')[0]} | 原始条目: {original_count} | 保留: {remaining_count} | 过滤: {original_count - remaining_count}")
+
+        # 最终统计
+        print(
+            f"\n 过滤完成 | 总条目: {total_entries} | 过滤: {filtered_count} | 保留: {total_entries - filtered_count}")
+
+        if filtered_details:
+            print("\n🗑️ 过滤详情:")
+            for detail in filtered_details:
+                print(f"  - {detail}")
+        else:
+            print(" 无内容被过滤")
+
+        return json.dumps(data).encode('utf-8')
 
     except Exception as e:
-        print(f"过滤响应时出错: {e}")
+        print(f" 过滤响应时出错: {e}")
+        import traceback
+        traceback.print_exc()
         return response_body.encode('utf-8')
+
+
+# 辅助函数：截断长文本
+def truncate_text(text, max_length):
+    if len(text) > max_length:
+        return text[:max_length] + "..."
+    return text
 
 
 def print_filtered_info(item_type, identifier, *texts):
