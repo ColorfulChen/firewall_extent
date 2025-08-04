@@ -5,17 +5,22 @@ from datetime import datetime
 
 
 def contains_forbidden_text(text, forbidden_words):
-    """
-    检查文本是否包含任何违禁词（不区分大小写）
-    """
     if not text or not forbidden_words:
         return False
 
     lower_text = text.lower()
-    return any(
-        re.search(rf'\b{re.escape(word.lower())}\b', lower_text)
-        for word in forbidden_words
-    )
+
+    for word in forbidden_words:
+        pattern = r'(?<![a-z])' + re.escape(word.lower()) + r'(?![a-z])'
+        match = re.search(pattern, lower_text)
+
+        if match:
+            start, end = match.span()
+            context = text[max(0, start - 10):min(len(text), end + 10)]
+            print(f"🔥 检测到违禁词匹配 | 词: '{word}' | 位置: {start}-{end} | 上下文: '...{context}...'")
+            return True
+
+    return False
 
 def contains_filter_words(text, filter_words):
     """检查文本中是否包含任何违禁词，返回匹配的违禁词列表"""
