@@ -3,7 +3,6 @@ import re
 import time
 from datetime import datetime
 
-
 def contains_forbidden_text(text, forbidden_words):
     if not text or not forbidden_words:
         return False
@@ -22,12 +21,76 @@ def contains_forbidden_text(text, forbidden_words):
 
     return False
 
-def contains_filter_words(text, filter_words):
-    """检查文本中是否包含任何违禁词，返回匹配的违禁词列表"""
-    if not text:
-        return []
-    return [word for word in filter_words if word in text]
 
+def contains_filter_words(text, forbidden_words):
+    """检查文本中是否包含任何违禁词，返回匹配的违禁词列表"""
+    if not text or not forbidden_words:
+        return False
+
+    lower_text = text.lower()
+
+    for word in forbidden_words:
+        pattern = r'(?<![a-z])' + re.escape(word.lower()) + r'(?![a-z])'
+        match = re.search(pattern, lower_text)
+
+        if match:
+            start, end = match.span()
+            context = text[max(0, start - 10):min(len(text), end + 10)]
+            print(f"🔥 检测到违禁词匹配 | 词: '{word}' | 位置: {start}-{end} | 上下文: '...{context}...'")
+            return word
+
+    return None
+
+
+def filter_useStoryTopicQuery(response_body, filter_words):
+    print("开始过滤Today‘s News")
+    try:
+        # 解析JSON数据
+        data = json.loads(response_body)
+
+        # 获取故事条目列表
+        items = data.get("data", {}).get("story_topic", {}).get("stories", {}).get("items", [])
+
+        # 创建新列表存储过滤后的条目
+        filtered_items = []
+        removed_count = 0
+
+        # 遍历所有条目
+        for item in items:
+            # 获取核心内容（标题+摘要）
+            result = item.get("trend_results", {}).get("result", {})
+            core = result.get("core", {})
+            name = core.get("name", "")
+            hook = core.get("hook", "")
+
+            # 检查是否包含任何过滤词
+            contains_filter_word = (
+                    contains_forbidden_text(name, filter_words) or
+                    contains_forbidden_text(hook, filter_words)
+            )
+
+            # 保留未包含过滤词的条目
+            if not contains_filter_word:
+                filtered_items.append(item)
+            else:
+                removed_count += 1
+                print(f"🗑 移除条目: {name}")
+
+        # 更新数据结构
+        if "stories" in data["data"]["story_topic"]:
+            data["data"]["story_topic"]["stories"]["items"] = filtered_items
+
+        print(f" 过滤完成 | 原始条目: {len(items)} | 保留: {len(filtered_items)} | 移除: {removed_count}")
+
+        # 返回过滤后的JSON
+        return json.dumps(data, separators=(",", ":"))
+
+
+    except Exception as e:
+
+        print(f"过滤Today's news出错: {e}")
+
+        return response_body
 
 
 def filter_suggestions(data, filter_words):
@@ -74,58 +137,6 @@ def filter_suggestions(data, filter_words):
 
     return filtered_data
 
-def filter_timeline_response(response_body,filter_words):
-    """过滤HomeTimeline响应（仅关键词过滤）"""
-    try:
-        data = json.loads(response_body)
-
-        # 确保数据结构正确
-        if not data.get("data", {}).get("home", {}).get("home_timeline_urt", {}).get("instructions"):
-            return response_body.encode('utf-8')
-
-        filtered_entries = []
-        entries = data["data"]["home"]["home_timeline_urt"]["instructions"][0]["entries"]
-
-        for entry in entries:
-            # 跳过非推文条目
-            if not entry.get("content", {}).get("itemContent", {}).get("tweet_results"):
-                filtered_entries.append(entry)
-                continue
-
-            tweet = entry["content"]["itemContent"]["tweet_results"]["result"]
-            tweet_id = tweet.get("rest_id", "unknown")
-            tweet_text = tweet.get("legacy", {}).get("full_text", "")
-            user_name = tweet.get("core", {}).get("user_results", {}).get("result", {}).get("legacy", {}).get(
-                "screen_name", "")
-
-            # 检查关键词匹配
-            text_matches = contains_filter_words(tweet_text,filter_words)
-            user_matches = contains_filter_words(user_name,filter_words)
-
-            # 如果有匹配的关键词，则过滤并打印
-            if text_matches or user_matches:
-                # 打印被过滤的推文信息
-                print("\n" + "=" * 50)
-                print(f"🚫 过滤推文 ID: {tweet_id}")
-                print(f"👤 用户: @{user_name}")
-                if text_matches:
-                    print(f"📝 内容匹配关键词: {', '.join(text_matches)}")
-                if user_matches:
-                    print(f"👤 用户名匹配关键词: {', '.join(user_matches)}")
-                print(f"📄 内容: {tweet_text[:150]}{'...' if len(tweet_text) > 150 else ''}")
-                print("=" * 50 + "\n")
-                continue
-
-            filtered_entries.append(entry)
-
-        # 更新数据
-        data["data"]["home"]["home_timeline_urt"]["instructions"][0]["entries"] = filtered_entries
-        return json.dumps(data).encode('utf-8')
-
-    except Exception as e:
-        print(f"过滤推文时出错: {e}")
-        return response_body.encode('utf-8')
-
 
 def filter_search_timeline_response(response_body, filter_words):
     try:
@@ -153,17 +164,33 @@ def filter_search_timeline_response(response_body, filter_words):
                 filter_reason = ""
 
                 # 1. 用户模块过滤
-                if "usermodule" in entry_id:
-                    for item in entry.get("content", {}).get("items", []):
-                        user_data = item.get("item", {}).get("itemContent", {}).get("user_results", {}).get("result",
-                                                                                                            {})
+                if "usermodule" in entry_id or entry_id.startswith("user-"):
+                    # 统一处理用户模块和用户条目
+                    user_data = None
+
+                    if "usermodule" in entry_id:
+                        # 用户模块结构
+                        for item in entry.get("content", {}).get("items", []):
+                            user_data = item.get("item", {}).get("itemContent", {}).get("user_results", {}).get(
+                                "result", {})
+                            if user_data:
+                                break
+                    else:
+                        # 用户条目结构
+                        content = entry.get("content", {})
+                        item_content = content.get("itemContent", {})
+                        user_results = item_content.get("user_results", {})
+                        user_data = user_results.get("result", {})
+
+                    if user_data:
+                        # 正确获取用户信息
                         core = user_data.get("core", {})
                         legacy = user_data.get("legacy", {})
-
                         screen_name = core.get("screen_name", "")
                         description = legacy.get("description", "")
-                        name = legacy.get("name", "")
+                        name = core.get("name", "") or legacy.get("name", "")  # 兼容两种位置
 
+                        # 检查用户信息中的违禁词
                         if contains_forbidden_text(screen_name, filter_words):
                             filter_reason = f"用户名 '{screen_name}' 含违禁词"
                             filtered = True
@@ -177,7 +204,6 @@ def filter_search_timeline_response(response_body, filter_words):
                         if filtered:
                             filtered_details.append(f" 用户过滤 | @{screen_name} | 原因: {filter_reason}")
                             filtered_count += 1
-                            break
 
                 # 2. 推文过滤
                 elif entry_id.startswith("tweet-"):
@@ -185,28 +211,79 @@ def filter_search_timeline_response(response_body, filter_words):
                     legacy = tweet.get("legacy", {})
                     core = tweet.get("core", {})
 
-                    tweet_text = legacy.get("full_text", "")
-                    user_data = core.get("user_results", {}).get("result", {}).get("legacy", {})
-                    user_name = user_data.get("screen_name", "")
+                    # 获取推文作者信息 - 修复路径问题
+                    user_data = core.get("user_results", {}).get("result", {})
+                    if not user_data:
+                        # 尝试备用路径
+                        user_data = tweet.get("core", {}).get("user_results", {}).get("result", {})
 
-                    # 检查文本内容
-                    if contains_forbidden_text(tweet_text, filter_words):
+                    # 获取用户详细信息
+                    user_core = user_data.get("core", {})
+                    user_legacy = user_data.get("legacy", {})
+                    screen_name = user_legacy.get("screen_name", "")
+                    description = user_legacy.get("description", "")
+                    name = user_core.get("name", "") or user_legacy.get("name", "")
+
+                    # 获取推文内容
+                    tweet_text = legacy.get("full_text", "")
+
+                    # 获取所有提及的用户名
+                    user_mentions = []
+                    entities = legacy.get("entities", {})
+                    if entities:
+                        for mention in entities.get("user_mentions", []):
+                            user_mentions.append(mention.get("screen_name", ""))
+
+                    # 检查过滤条件
+                    # 1. 检查用户信息（用户名、显示名、描述）
+                    if contains_forbidden_text(screen_name, filter_words):
+                        filter_reason = f"作者用户名 @{screen_name} 含违禁词"
+                        filtered = True
+                    elif contains_forbidden_text(name, filter_words):
+                        filter_reason = f"作者显示名 '{name}' 含违禁词"
+                        filtered = True
+                    elif contains_forbidden_text(description, filter_words):
+                        filter_reason = f"作者描述含违禁词: '{truncate_text(description, 30)}'"
+                        filtered = True
+
+                    # 2. 检查推文内容
+                    elif contains_forbidden_text(tweet_text, filter_words):
                         filter_reason = f"推文内容含违禁词: '{truncate_text(tweet_text, 40)}'"
                         filtered = True
-                    elif contains_forbidden_text(user_name, filter_words):
-                        filter_reason = f"作者 @{user_name} 含违禁词"
-                        filtered = True
+
+                    # 3. 检查所有提及的用户名
+                    elif any(contains_forbidden_text(mention, filter_words) for mention in user_mentions):
+                        # 找出具体是哪个提及触发了过滤
+                        for mention in user_mentions:
+                            if contains_forbidden_text(mention, filter_words):
+                                filter_reason = f"提及用户 @{mention} 含违禁词"
+                                filtered = True
+                                break
+
+                    # 4. 检查媒体描述
                     else:
-                        # 检查媒体描述
-                        for media in legacy.get("entities", {}).get("media", []):
+                        extended_entities = legacy.get("extended_entities", {})
+                        media_list = extended_entities.get("media", []) if extended_entities else entities.get("media",
+                                                                                                               [])
+
+                        for media in media_list:
+                            # 检查媒体描述
                             if contains_forbidden_text(media.get("description", ""), filter_words):
                                 filter_reason = f"媒体描述含违禁词: '{truncate_text(media.get('description', ''), 30)}'"
                                 filtered = True
                                 break
 
+                            # 检查附加媒体信息
+                            additional_info = media.get("additional_media_info", {})
+                            if contains_forbidden_text(additional_info.get("title", ""), filter_words) or \
+                                    contains_forbidden_text(additional_info.get("description", ""), filter_words):
+                                filter_reason = f"媒体附加信息含违禁词"
+                                filtered = True
+                                break
+
                     if filtered:
                         tweet_id = tweet.get("rest_id", "")
-                        filtered_details.append(f" 推文过滤 | ID:{tweet_id} | @{user_name} | 原因: {filter_reason}")
+                        filtered_details.append(f" 推文过滤 | ID:{tweet_id} | @{screen_name} | 原因: {filter_reason}")
                         filtered_count += 1
 
                 # 3. 社区模块过滤
@@ -236,14 +313,14 @@ def filter_search_timeline_response(response_body, filter_words):
             instruction["entries"] = filtered_entries
             remaining_count = len(filtered_entries)
             print(
-                f" 模块处理 | 类型: {entry_id.split('-')[0]} | 原始条目: {original_count} | 保留: {remaining_count} | 过滤: {original_count - remaining_count}")
+                f" 模块处理 | 类型: {entry_id.split('-')[0] if '-' in entry_id else entry_id} | 原始条目: {original_count} | 保留: {remaining_count} | 过滤: {original_count - remaining_count}")
 
         # 最终统计
         print(
             f"\n 过滤完成 | 总条目: {total_entries} | 过滤: {filtered_count} | 保留: {total_entries - filtered_count}")
 
         if filtered_details:
-            print("\n🗑️ 过滤详情:")
+            print("\n 过滤详情:")
             for detail in filtered_details:
                 print(f"  - {detail}")
         else:
@@ -252,10 +329,11 @@ def filter_search_timeline_response(response_body, filter_words):
         return json.dumps(data).encode('utf-8')
 
     except Exception as e:
-        print(f" 过滤响应时出错: {e}")
+        print(f"❌ 过滤响应时出错: {e}")
         import traceback
         traceback.print_exc()
         return response_body.encode('utf-8')
+
 
 
 # 辅助函数：截断长文本
@@ -263,20 +341,6 @@ def truncate_text(text, max_length):
     if len(text) > max_length:
         return text[:max_length] + "..."
     return text
-
-
-def print_filtered_info(item_type, identifier, *texts):
-    """打印过滤信息"""
-    print("\n" + "=" * 50)
-    print(f"🚫 过滤{item_type.capitalize()}: {identifier}")
-
-    for i, text in enumerate(texts):
-        if text:
-            label = "👤 用户名" if i == 0 else "📝 内容" if i == 1 else f"文本{i + 1}"
-            print(f"{label}: {text[:150]}{'...' if len(text) > 150 else ''}")
-
-    print("=" * 50 + "\n")
-
 
 
 def filter_explore_content(response_body, filter_words):
@@ -354,6 +418,59 @@ def filter_explore_content(response_body, filter_words):
         return response_body
 
 
+def filter_TrendRelevantUsers(response_body, filter_words):
+
+    # 解析JSON数据
+    data = json.loads(response_body)
+
+    try:
+        # 定位到用户条目列表
+        items = \
+        data['data']['ai_trend_by_rest_id']['result']['trend_relevant_users']['timeline']['instructions'][0]['entries'][
+            0]['content']['items']
+
+        # 创建新的条目列表（用于存储保留的条目）
+        new_items = []
+        removed_count = 0
+
+        # 检查每个用户条目
+        for item in items:
+            user_result = item['item']['itemContent']['user_results']['result']
+            user_info = {
+                'screen_name': user_result['core']['screen_name'],
+                'name': user_result['core']['name'],
+                'description': user_result.get('legacy', {}).get('description', ''),
+                'location': user_result.get('location', {}).get('location', '')
+            }
+
+            # 检查是否包含过滤词
+            match_found = False
+            for field, value in user_info.items():
+                if any(filter_word.lower() in value.lower() for filter_word in filter_words):
+                    print(f"删除用户 @{user_info['screen_name']} - 字段 [{field}] 包含过滤词: '{value}'")
+                    match_found = True
+                    removed_count += 1
+                    break
+
+            # 保留未匹配的用户条目
+            if not match_found:
+                new_items.append(item)
+
+        # 更新条目列表
+        data['data']['ai_trend_by_rest_id']['result']['trend_relevant_users']['timeline']['instructions'][0]['entries'][
+            0]['content']['items'] = new_items
+
+        print(f"已过滤 {removed_count} 个用户条目，保留 {len(new_items)} 个条目")
+        return json.dumps(data, ensure_ascii=False)
+
+
+    except Exception as e:
+
+        print(f"Error filtering : {str(e)}")
+
+        return response_body
+
+
 def filter_sidebar_recommendations(response_body, filter_words):
     """过滤推荐关注JSON（sidebar_recommendations.json）"""
     try:
@@ -392,77 +509,6 @@ def filter_sidebar_recommendations(response_body, filter_words):
     except Exception as e:
         print(f"Error filtering sidebar_recommendations: {str(e)}")
         return response_body
-
-
-def filter_home_timeline(response_body, filter_words):
-    """过滤首页时间线JSON（home_timeline.json）"""
-    try:
-        data = json.loads(response_body)
-        if "data" not in data or "home" not in data["data"]:
-            return response_body
-
-        instructions = data["data"]["home"]["home_timeline_urt"]["instructions"]
-        deleted_tweets = []
-
-        for instruction in instructions:
-            if instruction["type"] == "TimelineAddEntries":
-                entries = instruction["entries"]
-                new_entries = []
-
-                for entry in entries:
-                    if entry["content"]["entryType"] == "TimelineTimelineItem":
-                        tweet_content = entry["content"]["itemContent"]
-
-                        # 检查推文文本
-                        tweet_text = ""
-                        if "tweet_results" in tweet_content and "result" in tweet_content["tweet_results"]:
-                            tweet = tweet_content["tweet_results"]["result"]
-                            if "legacy" in tweet:
-                                tweet_text = tweet["legacy"]["full_text"].lower()
-                            elif "note_tweet" in tweet:
-                                tweet_text = tweet["note_tweet"]["note_tweet_results"]["result"]["text"].lower()
-
-                        # 检查用户信息
-                        user_text = ""
-                        if ("tweet_results" in tweet_content and
-                                "result" in tweet_content["tweet_results"] and
-                                "core" in tweet_content["tweet_results"]["result"] and
-                                "user_results" in tweet_content["tweet_results"]["result"]["core"] and
-                                "result" in tweet_content["tweet_results"]["result"]["core"]["user_results"]):
-                            user = tweet_content["tweet_results"]["result"]["core"]["user_results"]["result"]
-                            user_screen_name = user.get("core", {}).get("screen_name",
-                                                                        "").lower() if "core" in user else ""
-                            user_description = user.get("legacy", {}).get("description",
-                                                                          "").lower() if "legacy" in user else ""
-                            user_text = f"{user_screen_name} {user_description}"
-
-                        # 检查是否包含过滤词
-                        if any(word in tweet_text or word in user_text for word in filter_words):
-                            deleted_tweets.append({
-                                "id": entry["entryId"],
-                                "text": tweet_text[:50] + "..." if tweet_text else "No text",
-                                "user": user_screen_name if user_screen_name else "Unknown"
-                            })
-                            continue
-
-                    new_entries.append(entry)
-
-                instruction["entries"] = new_entries
-
-        # 打印删除的推文
-        if deleted_tweets:
-            print(f"Filtered {len(deleted_tweets)} tweets from home_timeline:")
-            for tweet in deleted_tweets:
-                print(f"  - {tweet['id']} by @{tweet['user']}: {tweet['text']}")
-
-        return json.dumps(data)
-
-    except Exception as e:
-        print(f"Error filtering home_timeline: {str(e)}")
-        return response_body
-
-
-import json
 
 
 def filter_following_timeline(response_body, filter_words):
@@ -750,7 +796,7 @@ def filter_explore_page(json_str, filter_words):
 
         # 打印删除的条目信息
         if removed_details:
-            print(f"🚫 已删除 {removed_count} 个违规条目:")
+            print(f" 已删除 {removed_count} 个违规条目:")
             for detail in removed_details:
                 print(f"   - ID: {detail['id']}")
                 print(f"     类型: {detail['type']}, 原因: {detail['reason']}")
@@ -841,7 +887,7 @@ def filter_generic_timeline(response_body, filter_words):
         return json.dumps(data, ensure_ascii=False)
 
     except Exception as e:
-        print(f"❌ 过滤趋势数据时出错: {e}")
+        print(f" 过滤趋势数据时出错: {e}")
         # 出错时返回原始数据
         return response_body
 
@@ -1132,7 +1178,7 @@ def filter_ConnectTabTimeline(json_str, filter_words):
 
         return result_json
     except Exception as e:
-        print(f"❌ 处理过程中发生严重错误: {e}")
+        print(f" 处理过程中发生严重错误: {e}")
         print("返回原始数据")
         return json_str
 
@@ -1268,7 +1314,7 @@ def filter_CommunitiesExploreTimeline(json_str, filter_words):
     banned_matches = []
 
     try:
-        print(f"🔍 开始过滤 CommunitiesExploreTimeline 数据，使用 {len(filter_words)} 个违禁词")
+        print(f" 开始过滤 CommunitiesExploreTimeline 数据，使用 {len(filter_words)} 个违禁词")
         data = json.loads(json_str)
 
         # 确保数据结构存在
@@ -1289,7 +1335,7 @@ def filter_CommunitiesExploreTimeline(json_str, filter_words):
                 original_entry_count = len(entries)
 
                 if original_entry_count == 0:
-                    print("⚠️ 警告: 未找到任何条目数据")
+                    print(" 警告: 未找到任何条目数据")
                     return json_str
 
                 print(f" 发现 {original_entry_count} 个待处理条目")
@@ -1370,9 +1416,6 @@ def filter_CommunitiesExploreTimeline(json_str, filter_words):
 
         return json.dumps(data, ensure_ascii=False)
 
-    except json.JSONDecodeError:
-        print("❌ JSON解析失败，返回原始内容")
-        return json_str
     except Exception as e:
         print(f"❌ 过滤时发生未知错误: {str(e)}")
         return json_str
@@ -1448,7 +1491,7 @@ def filter_CommunitiesFetchOneQuery(response_body, filter_words):
 
         # 处理违规情况
         if violations:
-            print(f"[{operation_id}] 🚨 发现 {len(violations)} 处违规内容!")
+            print(f"[{operation_id}]  发现 {len(violations)} 处违规内容!")
             for v in violations:
                 print(f"        违规 #{v['index']}:")
                 print(f"        字段: {v['field']}")
@@ -1652,7 +1695,7 @@ def filter_community_entry(entry, filter_words):
         return entry
 
     except Exception as e:
-        print(f"⚠️ 处理社区条目时出错: {e}")
+        print(f" 处理社区条目时出错: {e}")
         return entry
 
 
@@ -1707,9 +1750,9 @@ def filter_CommunityDiscoveryTimeline(json_str, filter_words):
         print(f"• 过滤社区数: {filtered_count}")
 
         if filtered_count == 0:
-            print("• 状态: 没有发现需要过滤的内容 ✅")
+            print("• 状态: 没有发现需要过滤的内容 ")
         else:
-            print(f"• 状态: 已过滤 {filtered_count} 个社区 🚫")
+            print(f"• 状态: 已过滤 {filtered_count} 个社区 ")
 
         print("=" * 50)
         return json.dumps(data, ensure_ascii=False)
@@ -1853,7 +1896,7 @@ def filter_CommunitiesSearchQuery(json_str, filter_words):
             if found_bad_words:
                 removed_count += 1
                 removed_names.append(community_name)
-                print(f"❌ 删除社区: '{community_name}' | 包含违禁词: {found_bad_words}")
+                print(f" 删除社区: '{community_name}' | 包含违禁词: {found_bad_words}")
             else:
                 filtered_communities.append(community)
 
@@ -2445,26 +2488,3 @@ def should_delete_tweet(tweet_data, filter_words):
 
     # 检查是否包含过滤词
     return any(word in tweet_text or word in user_info for word in filter_words)
-
-
-def load_cookies(driver, cookies_file):
-    """加载Cookies实现自动登录"""
-    driver.get("https://x.com")
-    time.sleep(2)
-
-    with open(cookies_file, 'r') as file:
-        cookies = json.load(file)
-
-    for cookie in cookies:
-        if 'sameSite' in cookie and cookie['sameSite'] not in ['Strict', 'Lax', 'None']:
-            cookie['sameSite'] = 'Lax'
-        if 'domain' in cookie and cookie['domain'].startswith('.'):
-            cookie['domain'] = cookie['domain'][1:]
-
-        try:
-            driver.add_cookie(cookie)
-        except Exception as e:
-            print(f"无法添加cookie: {cookie.get('name')}, 错误: {e}")
-
-    driver.refresh()
-    time.sleep(3)
