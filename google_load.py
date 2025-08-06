@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import argparse
@@ -14,6 +15,12 @@ from tools.google_scholar import (
   google_scholar_search_filter,
   google_scholar_search_page_filter
 )
+from tools.twitter_filter import filter_following_timeline, filter_sidebar_recommendations, filter_explore_content, \
+    filter_tweet_detail, filter_suggestions, filter_search_timeline_response, filter_explore_page, \
+    filter_generic_timeline, filter_aitrendbrestid_detail, filter_UserTweets, filter_ListLatestTweetsTimeline, \
+    filter_ConnectTabTimeline, filter_CommunitiesRankedTimeline, filter_CommunitiesExploreTimeline, \
+    filter_CommunitiesFetchOneQuery, filter_CommunityDiscoveryTimeline, filter_TopicTimelineQuery, \
+    filter_CommunitiesSearchQuery, filter_community_tweets, filter_ListsManagementPageTimeline,filter_useStoryTopicQuery,filter_TrendRelevantUsers
 from tools.wiki_filter import (
     wiki_search_filter, 
     wiki_suggestions_filter, 
@@ -311,6 +318,461 @@ def response_interceptor(request, response):
                 response.body = hugging_face_index_page_filter(response.body.decode('utf-8', errors='ignore'), FILTER_WORDS)
                 duration = time.time() - start_time
                 print(f"过滤huggingface.co首页耗时: {duration:.4f}秒")
+        elif 'x.com/i/api/' in request.url:
+            print(f"检测到API请求: {request.url}")
+            if 'HomeTimeline' in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_following_timeline(response.body.decode('utf-8', errors='ignore'),
+                                                                  FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif 'SidebarUserRecommendations' in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_sidebar_recommendations(response.body.decode('utf-8', errors='ignore'),
+                                                                     FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif 'ExploreSidebar' in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_explore_content(response_body, FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif 'HomeLatestTimeline?' in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_following_timeline(response_body, FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+
+            elif 'TweetDetail?' in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body, disable_cache = filter_tweet_detail(
+                            response.body.decode('utf-8', errors='ignore'),
+                            FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+
+            elif "search/typeahead.json" in request.url:
+                print("\n🔍 拦截到搜索建议请求:", request.url)
+
+                try:
+                    decoded = response.body.decode("utf-8", errors="ignore")
+                    data = json.loads(decoded)
+
+                    # 应用过滤
+                    filtered = filter_suggestions(data, FILTER_WORDS)
+                    response.body = json.dumps(filtered).encode("utf-8")
+                    response.headers["content-length"] = str(len(response.body))
+
+                    print(f"  原始结果数: {len(data.get('users', []))}用户 | {len(data.get('topics', []))} 话题")
+                    print(f"  过滤后结果: {len(filtered.get('users', []))}用户 | {len(filtered.get('topics', []))}话题")
+
+                except Exception as e:
+                    print(f"处理搜索建议出错: {e}")
+            # 2. 处理搜索结果（GraphQL）
+            elif "SearchTimeline" in request.url:
+                print("\n 拦截到搜索结果请求:", request.url)
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    try:
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        filtered_body = filter_search_timeline_response(response_body, FILTER_WORDS)
+
+                        # 更新响应
+                        response.body = filtered_body
+                        response.headers['content-length'] = str(len(response.body))
+                        print(f" 已过滤搜索结果")
+
+                    except Exception as e:
+                        print(f"处理搜索响应时出错: {e}")
+
+
+            elif "ExplorePage" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(f"\n 处理探索页请求: {request.url}")
+                if 'application/json' in content_type:
+                    try:
+
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_explore_page(response_body, FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "GenericTimelineById" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(f"\n 处理趋势页请求: {request.url}")
+                if 'application/json' in content_type:
+                    try:
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_generic_timeline(response_body, FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "AiTrendByRestId?" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_aitrendbrestid_detail(response.body.decode('utf-8', errors='ignore'),
+                                                                     FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "UserTweets?" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_UserTweets(response.body.decode('utf-8', errors='ignore'),
+                                                          FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print( f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "ListLatestTweetsTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_ListLatestTweetsTimeline(response.body.decode('utf-8', errors='ignore'),
+                                                                        FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+
+            elif "ConnectTabTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_ConnectTabTimeline(response.body.decode('utf-8', errors='ignore'),
+                                                                  FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunitiesRankedTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_CommunitiesRankedTimeline(response.body.decode('utf-8', errors='ignore'),
+                                                                         FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print( f"过滤完成，耗时: {duration:.2f}s")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunitiesExploreTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_CommunitiesExploreTimeline(
+                            response.body.decode('utf-8', errors='ignore'),
+                            FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunitiesFetchOneQuery" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_CommunitiesFetchOneQuery(response.body.decode('utf-8', errors='ignore'),
+                                                                        FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunityDiscoveryTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_CommunityDiscoveryTimeline(
+                            response.body.decode('utf-8', errors='ignore'),
+                            FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "TopicTimelineQuery" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_TopicTimelineQuery(response.body.decode('utf-8', errors='ignore'),
+                                                                  FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print( f"过滤完成，耗时: {duration:.2f}s")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunitiesSearchQuery" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_CommunitiesSearchQuery(response.body.decode('utf-8', errors='ignore'),
+                                                                      FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "CommunityTweetsTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_community_tweets(response.body.decode('utf-8', errors='ignore'),
+                                                                FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "ListsManagementPageTimeline" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_ListsManagementPageTimeline(
+                            response.body.decode('utf-8', errors='ignore'),
+                            FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        print(f"过滤完成，耗时: {duration:.2f}s ")
+
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "TrendRelevantUsers?" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+    
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_TrendRelevantUsers(response.body.decode('utf-8', errors='ignore'),
+                                                                FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        save_api_data(request.url, response.body, "TrendRelevantUsers")
+    
+                        print(
+                            f"过滤完成，耗时: {duration:.2f}s | 原始大小: {len(response_body)} | 过滤后: {len(filtered_body)}")
+    
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+    
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "useStoryTopicQuery" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+    
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_useStoryTopicQuery(response.body.decode('utf-8', errors='ignore'),
+                                                                FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        save_api_data(request.url, response.body, "useStoryTopicQuery")
+    
+                        print(
+                            f"过滤完成，耗时: {duration:.2f}s | 原始大小: {len(response_body)} | 过滤后: {len(filtered_body)}")
+    
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+    
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
 
     except Exception as e:
         print(f"Error in response_interceptor for URL {url}: {e}")
