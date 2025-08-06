@@ -20,7 +20,7 @@ from tools.twitter_filter import filter_following_timeline, filter_sidebar_recom
     filter_generic_timeline, filter_aitrendbrestid_detail, filter_UserTweets, filter_ListLatestTweetsTimeline, \
     filter_ConnectTabTimeline, filter_CommunitiesRankedTimeline, filter_CommunitiesExploreTimeline, \
     filter_CommunitiesFetchOneQuery, filter_CommunityDiscoveryTimeline, filter_TopicTimelineQuery, \
-    filter_CommunitiesSearchQuery, filter_community_tweets, filter_ListsManagementPageTimeline
+    filter_CommunitiesSearchQuery, filter_community_tweets, filter_ListsManagementPageTimeline,filter_useStoryTopicQuery,filter_TrendRelevantUsers
 from tools.wiki_filter import (
     wiki_search_filter, 
     wiki_suggestions_filter, 
@@ -723,6 +723,54 @@ def response_interceptor(request, response):
                         # 更新响应
                         response.headers['content-length'] = str(len(response.body))
 
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "TrendRelevantUsers?" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+    
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_TrendRelevantUsers(response.body.decode('utf-8', errors='ignore'),
+                                                                FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        save_api_data(request.url, response.body, "TrendRelevantUsers")
+    
+                        print(
+                            f"过滤完成，耗时: {duration:.2f}s | 原始大小: {len(response_body)} | 过滤后: {len(filtered_body)}")
+    
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+    
+                    except Exception as e:
+                        print(f"处理响应时出错: {e}")
+            elif "useStoryTopicQuery" in request.url:
+                content_type = response.headers.get('Content-Type', '')
+                print(request.url + " : " + content_type)
+                if 'application/json' in content_type:
+                    try:
+    
+                        # 解码响应体
+                        response_body = response.body.decode('utf-8', errors='ignore')
+                        # 过滤推文
+                        start_time = time.time()
+                        filtered_body = filter_useStoryTopicQuery(response.body.decode('utf-8', errors='ignore'),
+                                                                FILTER_WORDS)
+                        response.body = filtered_body.encode('utf-8')
+                        duration = time.time() - start_time
+                        save_api_data(request.url, response.body, "useStoryTopicQuery")
+    
+                        print(
+                            f"过滤完成，耗时: {duration:.2f}s | 原始大小: {len(response_body)} | 过滤后: {len(filtered_body)}")
+    
+                        # 更新响应
+                        response.headers['content-length'] = str(len(response.body))
+    
                     except Exception as e:
                         print(f"处理响应时出错: {e}")
 
