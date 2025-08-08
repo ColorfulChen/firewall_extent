@@ -3,6 +3,7 @@ import re
 import time
 from datetime import datetime
 
+
 def contains_forbidden_text(text, forbidden_words):
     if not text or not forbidden_words:
         return False
@@ -10,13 +11,24 @@ def contains_forbidden_text(text, forbidden_words):
     lower_text = text.lower()
 
     for word in forbidden_words:
-        pattern = r'(?<![a-z])' + re.escape(word.lower()) + r'(?![a-z])'
-        match = re.search(pattern, lower_text)
+        lower_word = word.lower()
+        escaped_word = re.escape(lower_word)
 
-        if match:
+        # 全词匹配
+        whole_word_pattern = rf'(?<![a-z]){escaped_word}(?![a-z0-9‐–—])'
+        # 子串匹配
+        substring_pattern = escaped_word
+
+        # 检查两种模式
+        whole_match = re.search(whole_word_pattern, lower_text)
+        substr_match = re.search(substring_pattern, lower_text)
+
+        if whole_match or substr_match:
+            match = whole_match if whole_match else substr_match
             start, end = match.span()
-            context = text[max(0, start - 10):min(len(text), end + 10)]
-            print(f"🔥 检测到违禁词匹配 | 词: '{word}' | 位置: {start}-{end} | 上下文: '...{context}...'")
+            context = text[max(0, start - 10): min(len(text), end + 10)]
+            print(
+                f"🔥 匹配模式: {'全词' if whole_match else '子串'} | 违禁词: '{word}' | 位置: {start}-{end} | 上下文: ...{context}...")
             return True
 
     return False
@@ -204,6 +216,9 @@ def filter_search_timeline_response(response_body, filter_words):
                         if filtered:
                             filtered_details.append(f" 用户过滤 | @{screen_name} | 原因: {filter_reason}")
                             filtered_count += 1
+
+
+
 
                 # 2. 推文过滤
                 elif entry_id.startswith("tweet-"):
@@ -949,119 +964,123 @@ def filter_aitrendbrestid_detail(json_str, filter_words):
         return json_str
 
 
-def filter_UserTweets(json_str, filter_words):
-    start_time = time.time()
-    original_size = len(json_str)
-    filtered_count = 0
-    recommended_filtered = 0
-    total_tweets = 0
-    total_recommended = 0
 
+def check_usertweet_contains_forbidden_words(tweet_data, forbidden_words):
+    """检查单个推文对象是否包含违禁词"""
+    if not tweet_data or not isinstance(tweet_data, dict):
+        return False
+
+    # 收集所有需要检查的文本
+    all_text = []
+
+    # 1. 主推文文本
+    legacy = tweet_data.get('legacy', {})
+    main_text = legacy.get('full_text', '')
+    if main_text:
+        all_text.append(main_text)
+
+    # 2. 转推的原始文本
+    if 'retweeted_status_result' in legacy:
+        retweet_result = legacy['retweeted_status_result'].get('result', {})
+        retweet_legacy = retweet_result.get('legacy', {})
+        retweet_text = retweet_legacy.get('full_text', '')
+        if retweet_text:
+            all_text.append(retweet_text)
+
+    # 3. 引用推文的文本
+    if 'quoted_status_result' in tweet_data:
+        quoted_result = tweet_data['quoted_status_result'].get('result', {})
+        quoted_legacy = quoted_result.get('legacy', {})
+        quoted_text = quoted_legacy.get('full_text', '')
+        if quoted_text:
+            all_text.append(quoted_text)
+
+    # 合并所有需要检查的文本
+    combined_text = " ".join(all_text).strip()
+
+    return contains_forbidden_text(combined_text, forbidden_words)
+
+
+def filter_usertweet_entries(entries, forbidden_words):
+    """递归过滤嵌套条目"""
+    filtered_entries = []
+
+    for entry in entries:
+        entry_id = entry.get('entryId', '')
+        content = entry.get('content', {})
+        entry_type = content.get('entryType', '')
+
+        # 1. 处理推文条目
+        if entry_id.startswith('tweet-') or entry_type == "TimelineTimelineItem":
+            item_content = content.get('itemContent', {})
+            tweet_results = item_content.get('tweet_results', {})
+            result = tweet_results.get('result', {})
+
+            if check_usertweet_contains_forbidden_words(result, forbidden_words):
+                print(f"🚫 删除推文 {entry_id}: 包含违禁词")
+                continue
+            else:
+                filtered_entries.append(entry)
+
+        # 2. 处理模块条目（如对话线程）
+        elif entry_type == "TimelineTimelineModule":
+            # 递归处理模块内的子条目
+            items = content.get('items', [])
+            filtered_items = []
+
+            for item in items:
+                item_entry = item.get('item', {})
+                item_content = item_entry.get('itemContent', {})
+
+                # 处理模块内的推文
+                if item_content.get('itemType') == "TimelineTweet":
+                    tweet_results = item_content.get('tweet_results', {})
+                    result = tweet_results.get('result', {})
+
+                    if check_usertweet_contains_forbidden_words(result, forbidden_words):
+                        item_id = item.get('entryId', 'unknown-item')
+                        print(f"🚫 删除模块内推文 {item_id}: 包含违禁词")
+                        continue
+                    else:
+                        filtered_items.append(item)
+
+            # 只有当模块内还有条目时才保留该模块
+            if filtered_items:
+                # 创建模块的深拷贝以避免修改原始数据
+                new_module = json.loads(json.dumps(entry))
+                new_module['content']['items'] = filtered_items
+                filtered_entries.append(new_module)
+            else:
+                print(f"🗑️ 删除空模块 {entry_id}")
+
+        # 3. 保留其他类型条目（如推荐关注）
+        else:
+            filtered_entries.append(entry)
+
+    return filtered_entries
+
+
+def filter_UserTweets(json_str, forbidden_words):
+    """过滤包含违禁关键词的推文条目（支持嵌套结构）"""
     try:
-        # 解析JSON为Python对象
         data = json.loads(json_str)
 
-        # 获取instructions列表
-        instructions = data["data"]["user"]["result"]["timeline"]["timeline"]["instructions"]
+        # 定位到推文条目列表
+        instructions = data['data']['user']['result']['timeline']['timeline']['instructions']
+        for instr in instructions:
+            if instr.get('type') == 'TimelineAddEntries':
+                entries = instr['entries']
+                # 递归过滤所有条目（包括嵌套结构）
+                filtered_entries = filter_usertweet_entries(entries, forbidden_words)
+                instr['entries'] = filtered_entries
+                break
 
-        # 遍历所有指令
-        for instruction in instructions:
-            if instruction.get("type") == "TimelineAddEntries":
-                entries = instruction["entries"]
-                filtered_entries = []
+        return json.dumps(data, ensure_ascii=False)
 
-                for entry in entries:
-                    entry_id = entry["entryId"]
+    except Exception as e:
+        print(f"处理JSON时出错: {str(e)}")
+        return json_str
 
-                    # 处理推文条目
-                    if entry_id.startswith("tweet-"):
-                        total_tweets += 1
-                        try:
-                            # 获取推文文本
-                            tweet_content = entry["content"]["itemContent"]["tweet_results"]["result"]
-                            legacy = tweet_content.get("legacy", {})
-                            full_text = legacy.get("full_text", "").lower()
-
-                            # 检查是否包含过滤词
-                            contains_filter_word = any(
-                                word.lower() in full_text
-                                for word in filter_words
-                            )
-
-                            if contains_filter_word:
-                                filtered_count += 1
-                                continue  # 跳过包含过滤词的推文
-
-                            filtered_entries.append(entry)
-
-                        except KeyError:
-                            # 结构异常时保留条目
-                            filtered_entries.append(entry)
-
-                    # 处理推荐关注模块
-                    elif entry_id.startswith("who-to-follow-"):
-                        total_recommended += 1
-                        try:
-                            items = entry["content"]["items"]
-                            filtered_items = []
-
-                            for item in items:
-                                try:
-                                    user_result = item["itemContent"]["user_results"]["result"]
-                                    legacy = user_result.get("legacy", {})
-                                    description = legacy.get("description", "").lower()
-
-                                    # 检查简介是否包含过滤词
-                                    contains_filter_word = any(
-                                        word.lower() in description
-                                        for word in filter_words
-                                    )
-
-                                    if contains_filter_word:
-                                        recommended_filtered += 1
-                                        continue  # 跳过包含过滤词的用户
-
-                                    filtered_items.append(item)
-
-                                except KeyError:
-                                    # 结构异常时保留条目
-                                    filtered_items.append(item)
-
-                            # 更新过滤后的项目
-                            if filtered_items:
-                                entry["content"]["items"] = filtered_items
-                                filtered_entries.append(entry)
-                            else:
-                                # 如果所有推荐用户都被过滤，则移除整个模块
-                                recommended_filtered += 1
-
-                        except KeyError:
-                            # 结构异常时保留条目
-                            filtered_entries.append(entry)
-
-                    # 保留其他类型条目
-                    else:
-                        filtered_entries.append(entry)
-
-                # 更新过滤后的条目
-                instruction["entries"] = filtered_entries
-
-        # 序列化回JSON
-        filtered_json = json.dumps(data, ensure_ascii=False)
-        filtered_size = len(filtered_json)
-
-        # 打印过滤统计信息
-        duration = time.time() - start_time
-        print(f"[UserTweets过滤] 耗时: {duration:.4f}s | "
-              f"原始: {original_size}字节 | 过滤后: {filtered_size}字节 | "
-              f"过滤推文: {filtered_count}/{total_tweets} | "
-              f"过滤推荐用户: {recommended_filtered}/{total_recommended}")
-
-        return filtered_json
-
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"[UserTweets过滤] 错误: {e} | 返回原始数据")
-        return json_str  # 解析失败时返回原始数据
 
 
 def filter_ConnectTabTimeline(json_str, filter_words):
@@ -1922,111 +1941,89 @@ def filter_CommunitiesSearchQuery(json_str, filter_words):
 
 
 def filter_community_tweets(json_str, forbidden_words):
-    """
-    过滤社区推文时间线中包含违禁词的条目
-    """
-    # 初始化统计信息
-    stats = {
-        'total_entries': 0,
-        'pinned_entries': 0,
-        'removed_entries': 0,
-        'removed_contents': []
-    }
-
-    def process_entry(entry):
-        """处理单个条目，返回是否保留"""
-        try:
-            # 只处理推文类型的条目
-            entry_id = entry.get("entryId", "")
-            stats['total_entries'] += 1
-
-            if not entry_id.startswith("tweet-"):
-                return True  # 非推文条目保留
-
-            content = entry["content"]
-            # 验证条目结构
-            if (content.get("entryType") == "TimelineTimelineItem" and
-                    content.get("itemContent", {}).get("itemType") == "TimelineTweet"):
-
-                tweet = content["itemContent"]["tweet_results"]["result"]
-                tweet_text = tweet["legacy"]["full_text"]
-
-                # 检查是否是置顶条目
-                is_pinned = "socialContext" in content.get("itemContent", {})
-                if is_pinned:
-                    stats['pinned_entries'] += 1
-
-
-                if contains_forbidden_text(tweet_text, forbidden_words):
-                    # 记录被删除的内容
-                    truncated_text = tweet_text[:100] + ('...' if len(tweet_text) > 100 else '')
-                    author = tweet["core"]["user_results"]["result"]["legacy"]["screen_name"]
-                    removed_info = {
-                        'entry_id': entry_id,
-                        'author': author,
-                        'text': truncated_text,
-                        'is_pinned': is_pinned
-                    }
-                    stats['removed_contents'].append(removed_info)
-                    stats['removed_entries'] += 1
-                    return False
-        except KeyError:
-            # 结构异常时保留条目
-            pass
-        return True
-
     try:
-        # 打印开始处理信息
-        print(f" 开始过滤社区推文，违禁词列表: {forbidden_words}")
-
         data = json.loads(json_str)
-        timeline = data["data"]["communityResults"]["result"]["ranked_community_timeline"]["timeline"]
-        new_instructions = []
+        instructions = data.get("data", {}).get("communityResults", {}).get("result", {}) \
+            .get("ranked_community_timeline", {}).get("timeline", {}) \
+            .get("instructions", [])
 
-        for instruction in timeline["instructions"]:
-            # 处理置顶推文
-            if instruction["type"] == "TimelinePinEntry":
-                if process_entry(instruction["entry"]):
-                    new_instructions.append(instruction)
+        filtered_instructions = []
+        removed_count = 0
 
-            # 处理常规推文列表
-            elif instruction["type"] == "TimelineAddEntries":
-                original_count = len(instruction["entries"])
-                instruction["entries"] = [
-                    entry for entry in instruction["entries"]
-                    if process_entry(entry)
-                ]
-                new_instructions.append(instruction)
+        for instruction in instructions:
+            if instruction.get("type") == "TimelinePinEntry":
+                entry = instruction.get("entry", {})
+                content = entry.get("content", {})
+                item_content = content.get("itemContent", {})
+                tweet_data = item_content.get("tweet_results", {}).get("result", {})
 
-            # 保留其他类型指令
-            else:
-                new_instructions.append(instruction)
+                if should_remove_communitytweet(tweet_data, forbidden_words):
+                    removed_count += 1
+                    continue
 
-        timeline["instructions"] = new_instructions
-        result_json = json.dumps(data, ensure_ascii=False)
+            elif instruction.get("type") == "TimelineAddEntries":
+                entries = instruction.get("entries", [])
+                filtered_entries = []
 
-        # 打印处理结果统计
-        print(f"  过滤完成! 共处理 {stats['total_entries']} 个条目")
-        print(f"   - 置顶条目: {stats['pinned_entries']}")
-        print(f"   - 删除条目: {stats['removed_entries']}")
+                for entry in entries:
+                    content = entry.get("content", {})
+                    item_content = content.get("itemContent", {})
+                    tweet_data = item_content.get("tweet_results", {}).get("result", {})
 
-        # 打印被删除的条目详情
-        if stats['removed_entries'] > 0:
-            print("\n 被删除的条目:")
-            for i, content in enumerate(stats['removed_contents'], 1):
-                pinned_tag = " [置顶]" if content['is_pinned'] else ""
-                print(f"  {i}. 作者: @{content['author']}{pinned_tag}")
-                print(f"     条目ID: {content['entry_id']}")
-                print(f"     内容: '{content['text']}'")
-                print("-" * 50)
-        else:
-            print("🎉 未发现包含违禁词的条目")
+                    if should_remove_communitytweet(tweet_data, forbidden_words):
+                        removed_count += 1
+                        continue
 
-        return result_json
+                    filtered_entries.append(entry)
+
+                instruction["entries"] = filtered_entries
+
+            filtered_instructions.append(instruction)
+
+        data["data"]["communityResults"]["result"]["ranked_community_timeline"]["timeline"][
+            "instructions"] = filtered_instructions
+
+        print(f"已移除 {removed_count} 条包含违禁词的推文")
+        return json.dumps(data, ensure_ascii=False)
 
     except Exception as e:
-        print(f" 过滤社区推文时出错: {e}")
-        return json_str  # 出错时返回原始数据
+        print(f"过滤推文时出错: {e}")
+        return json_str
+
+
+def should_remove_communitytweet(tweet_data, forbidden_words):
+    """检查推文及所有引用推文是否包含违禁词"""
+    if not tweet_data:
+        return False
+
+    # 检查当前推文
+    tweet_text = extract_tweet_text(tweet_data)
+    if tweet_text and contains_forbidden_text(tweet_text, forbidden_words):
+        return True
+
+    # 递归检查引用推文
+    quoted_tweet = tweet_data.get("quoted_status_result", {}).get("result", {})
+    if quoted_tweet:
+        return should_remove_communitytweet(quoted_tweet, forbidden_words)
+
+    return False
+
+
+def extract_tweet_text(tweet_data):
+    """提取单层推文的文本内容"""
+    try:
+        # 优先检查 note_tweet 格式
+        if "note_tweet" in tweet_data:
+            return tweet_data["note_tweet"]["note_tweet_results"]["result"]["text"]
+
+        # 检查传统 legacy 格式
+        if "legacy" in tweet_data:
+            return tweet_data["legacy"]["full_text"]
+
+    except KeyError:
+        pass
+
+    return None
 
 
 def filter_ListsManagementPageTimeline(json_str, filter_words):
